@@ -101,7 +101,7 @@ pub struct ActivePlayer {
     pub melded: bool,
 }
 
-// Convert Player to ActivePlayer helper (not in original TS but needed for logic flow)
+// Convert Player to ActivePlayer helper
 impl ActivePlayer {
     pub fn from_player(player: Player, hand: Vec<Card>) -> Self {
         Self {
@@ -216,13 +216,7 @@ pub fn init_round(game_state: &mut GameState) -> RoundState {
     let mut deck = shuffle(create_deck());
     let mut active_players = Vec::new();
 
-    // We need to move strategies out temporarily or clone if we could,
-    // but strategies are unique. For simulation, we assume we can take ownership
-    // or we'd need to re-architect slightly. Here we drain the players to create ActivePlayers.
-    // However, to keep it simple and match TS logic where references are held:
-    // We will extract the players from GameState, convert them, and then in scoreRound we'd update them.
-    // Since GameState owns Players, we remove them to create RoundState.
-
+    // Drain players from GameState to create ActivePlayers
     let players_drain: Vec<Player> = game_state.players.drain(..).collect();
 
     for (i, player) in players_drain.into_iter().enumerate() {
@@ -290,7 +284,7 @@ pub fn meld_value(meld: &Meld) -> i32 {
                 };
             } else if let Some(next) = next_card {
                  val += if next.rank == Rank::Number(2) {
-                    11 // Joker is A (logic.ts says 11? Logic says A value is 11)
+                    11 // Joker is A
                 } else if card_value(next) == 10 && next.rank != Rank::Number(10) {
                     10
                 } else {
@@ -368,7 +362,7 @@ pub fn valid_rank_meld(meld_cards: &Vec<Card>) -> bool {
     if meld_cards.iter().filter(|c| c.rank == Rank::Joker).count() > 1 { return false; }
 
     let cards: Vec<&Card> = meld_cards.iter().filter(|c| c.rank != Rank::Joker).collect();
-    if cards.is_empty() { return false; } // Should not happen based on count check
+    if cards.is_empty() { return false; }
 
     let same_rank = cards.iter().all(|c| c.rank == cards[0].rank);
     let mut suits = std::collections::HashSet::new();
@@ -468,14 +462,9 @@ pub fn is_valid_set(meld: &Meld) -> bool {
 
 pub fn draw_from_deck(state: &mut RoundState) {
     if state.phase != Phase::Draw { panic!("Not draw phase"); }
-    let mut card = state.deck.remove(0); // shift() equivalent is remove(0) which is O(N) but Deck is small
-    // Actually wait, TS checks if card undefined.
-    // In Rust we check emptiness.
-    // If empty:
-    if state.deck.is_empty() { // Logic in TS seems to imply if shift returns undefined, try fire pile
-         // TS: state.deck.shift() returns card. If !card, use fire pile.
-         // Actually TS logic: let card = state.deck.shift(); if (!card) { ... }
-         // So if deck is empty at start of draw.
+    let mut card = state.deck.remove(0);
+
+    if state.deck.is_empty() {
          state.deck = shuffle(state.fire_pile.clone());
          state.fire_pile.clear();
          card = state.deck.remove(0);
@@ -552,7 +541,7 @@ pub fn play_in_meld(state: &mut RoundState, card: Card, meld_index: usize) {
 
     // Checks
     if meld_index >= state.table_melds.len() { panic!("Meld not found"); }
-    let meld_type = state.table_melds[meld_index].meld_type.clone(); // Clone type to avoid borrow conflict
+    let meld_type = state.table_melds[meld_index].meld_type.clone();
 
     {
         let player = &state.players[player_idx];
@@ -586,7 +575,7 @@ pub fn play_in_meld(state: &mut RoundState, card: Card, meld_index: usize) {
 
     if meld_type == MeldType::Sequence {
         let meld = &state.table_melds[meld_index];
-        let (success, take_joker) = can_play_in_sequence_meld(meld, &card, false); // playEnd default false in TS logic
+        let (success, take_joker) = can_play_in_sequence_meld(meld, &card, false);
         if !success { return; }
 
         let mut joker_to_return: Option<Card> = None;
@@ -631,34 +620,33 @@ pub fn is_round_over(state: &RoundState) -> bool {
 pub fn score_round(game_state: &mut GameState, round_state: &mut RoundState) {
     let winner_id = round_state.players.iter().find(|p| p.hand.is_empty()).unwrap().id.clone();
 
-    // We need to move players back from round_state to game_state or just update game_state players
-    // TS Logic: updates gameState.players[p].score
+    // In our Rust architecture, game_state.players is empty here because we drained it in init_round.
+    // We update the scores directly on the ActivePlayers in round_state, then move them back.
 
-    for p in &mut game_state.players {
-        if p.id != winner_id {
-            // Find in round_state
-            let round_player = round_state.players.iter().find(|rp| rp.id == p.id).unwrap();
-            if !round_player.melded {
-                p.score += 100;
+    for rp in &mut round_state.players {
+        if rp.id != winner_id {
+            if !rp.melded {
+                rp.score += 100;
             } else {
-                let hand_score: i32 = round_player.hand.iter().map(|c| card_penality(c)).sum();
-                p.score += hand_score;
+                let hand_score: i32 = rp.hand.iter().map(|c| card_penality(c)).sum();
+                rp.score += hand_score;
             }
         } else {
-            p.score -= 30;
+            rp.score -= 30;
         }
     }
+
     game_state.round += 1;
 
     let mut players_back = Vec::new();
     // drain gives us ownership of ActivePlayer (rp)
     for rp in round_state.players.drain(..) {
-            players_back.push(Player {
-                id: rp.id,
-                name: rp.name,
-                bot_strategy: rp.bot_strategy, // Move the strategy back
-                score: rp.score, // Use the updated score from the ActivePlayer
-            });
+         players_back.push(Player {
+             id: rp.id,
+             name: rp.name,
+             bot_strategy: rp.bot_strategy, // Move the strategy back
+             score: rp.score, // Use the updated score from the ActivePlayer
+         });
     }
 
     // Sort to ensure order P1..P4 (optional but good for consistency)

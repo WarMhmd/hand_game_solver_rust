@@ -7,9 +7,12 @@ mod bots {
     pub mod optimized_use_joker;
 }
 
-use crate::bot::{BotStrategy, RandomBot, DecideDrawResult, RankBot};
+use crate::bot::{BotStrategy, RandomBot, RankBot, DecideDrawResult};
 use crate::bots::optimized_use_joker::UseOptimizedJokerBot;
-use crate::logic::{init_game, init_round, is_round_over, draw_from_deck, draw_from_fire, discard_fire_card, lay_melds, play_in_meld, discard_card, score_round, Phase};
+use crate::bots::play_in_melds::UseMeldBot;
+use crate::bots::play_with_sequence::SequenceBot;
+use crate::bots::use_joker::UseJokerBot;
+use crate::logic::{init_game, init_round, is_round_over, draw_from_deck, draw_from_fire, discard_fire_card, lay_melds, play_in_meld, discard_card, score_round, Phase, Player};
 
 #[derive(Clone)]
 struct BotResult {
@@ -23,7 +26,7 @@ fn play_full_game(rounds: i32) {
         Box::new(RandomBot::new("RandomBot".to_string())),
         Box::new(RandomBot::new("RandomBot-1".to_string())),
         Box::new(RandomBot::new("RandomBot-2".to_string())),
-        Box::new(RankBot::new("UseOptimizedjokerBot".to_string())),
+        Box::new(UseJokerBot::new("UseOptimizedjokerBot".to_string())),
     ];
 
     let mut results: Vec<BotResult> = players.iter().map(|p| BotResult {
@@ -70,12 +73,6 @@ fn play_full_game(rounds: i32) {
             let mut draw_choice = DecideDrawResult::Deck;
 
             // Borrow strategy mutably
-            // Note: In Rust this is tricky because `round_state` owns `players` which own `strategies`.
-            // We need to borrow the strategy, but the strategy needs `round_state` as argument.
-            // This is a classic borrow checker conflict.
-            // We must temporarily remove the strategy or use raw pointers.
-            // Here, we take the strategy out of the Option, use it, and put it back.
-
             let mut strategy = round_state.players[current_player_idx].bot_strategy.take();
 
             if let Some(ref mut s) = strategy {
@@ -83,10 +80,6 @@ fn play_full_game(rounds: i32) {
                     draw_choice = s.decide_draw(&round_state);
                 }
             }
-
-            // Put strategy back? No, we need it for subsequent phases.
-            // We'll keep it out? No, we can't because draw_from_deck modifies round_state.
-            // Pattern: Take strategy -> Run logic -> Put strategy back.
 
             round_state.players[current_player_idx].bot_strategy = strategy;
 
@@ -116,15 +109,7 @@ fn play_full_game(rounds: i32) {
                 round_state.players[current_player_idx].bot_strategy = strategy;
 
                 if !melds.is_empty() {
-                    // lay_melds modifies round_state
-                    // We need to handle potential error (panic in logic.rs converted to Result ideally, but strict translation used panic)
-                    // We will wrap in catch_unwind or just run it. The TS code has try/catch.
-                    // Rust panic is terminal for the thread usually. We should assume success or check `lay_melds` logic.
-                    // Given constraints, we assume valid logic or rewrite lay_melds to return Result.
-                    // For now, call directly.
-
-                    // Note: TS has try-catch. Rust equivalents requires changing logic.rs signatures to Result.
-                    // I'll assume valid melds for simulation.
+                    // lay_melds modifies round_state. Assume valid.
                     lay_melds(&mut round_state, melds.clone());
 
                     println!("==================");
@@ -199,10 +184,21 @@ fn play_full_game(rounds: i32) {
 
             // Print summary
             for p in &game_state.players {
-                // Find hand in round_state (which was consumed? No, score_round manages it, but we drained players back to gamestate)
-                // Actually score_round logic above moved players back to GameState but `round_state` players is empty.
                 println!("{} | Score: {}", p.name, p.score);
             }
+        } else {
+            // Restore players if round timed out
+            let mut players_back = Vec::new();
+             for rp in round_state.players.drain(..) {
+                 players_back.push(Player {
+                     id: rp.id,
+                     name: rp.name,
+                     bot_strategy: rp.bot_strategy,
+                     score: rp.score,
+                 });
+             }
+             players_back.sort_by_key(|p| p.id.clone());
+             game_state.players = players_back;
         }
     }
 

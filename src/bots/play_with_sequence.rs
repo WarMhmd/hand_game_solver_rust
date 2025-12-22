@@ -122,7 +122,7 @@ impl BotStrategy for SequenceBot {
         if melds_value(&melds) < 51 && !player.melded { return vec![]; }
 
         let player_cards_num_after_meld = player.hand.len() as i32 - melds.iter().map(|m| m.cards.len() as i32).sum::<i32>();
-        if player_cards_num_after_meld == 3 || player_cards_num_after_meld == 2 { return vec![]; }
+        if player_cards_num_after_meld == 3 || player_cards_num_after_meld == 2 || player_cards_num_after_meld == 0 { return vec![]; }
         melds
     }
 

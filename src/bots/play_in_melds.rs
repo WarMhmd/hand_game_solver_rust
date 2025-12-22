@@ -1,4 +1,5 @@
 use crate::bot::{BotStrategy, DecideDrawResult, group_by_rank, group_by_suit};
+use crate::bots::play_with_sequence;
 use crate::logic::{RoundState, Card, Meld, MeldType, rank_order, valid_sequence_two_cards, melds_value, Rank, can_play_in_sequence_meld, can_play_in_rank_meld};
 
 pub struct UseMeldBot {
@@ -120,12 +121,15 @@ impl BotStrategy for UseMeldBot {
         let player = &state.players[state.current_player];
         let melds = self.find_melds(&player.hand);
         if melds_value(&melds) < 51 && !player.melded { return vec![]; }
+        let player_cards_num_after_meld = player.hand.len() as i32 - melds.iter().map(|m| m.cards.len() as i32).sum::<i32>();
+        if player_cards_num_after_meld == 0 { return vec![]; }
         melds
     }
 
     fn decide_play_in_meld(&mut self, state: &RoundState) -> (Option<Card>, i32) {
         let player = &state.players[state.current_player];
         if !player.melded { return (None, -1); }
+        if player.hand.len() == 1 { return (None, -1); }
         let mut meld_index = -1;
         let mut found_card: Option<Card> = None;
 
