@@ -1,0 +1,8 @@
+[package]
+name = "hand_game_solver_rust"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+rand = "0.8"
+lazy_static = "1.4" # Optional, but useful for static lookups if needed
