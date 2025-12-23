@@ -8,7 +8,6 @@ mod bots {
 }
 
 use crate::bot::{BotStrategy, RandomBot, RankBot, DecideDrawResult};
-use crate::bots::optimized_use_joker::UseOptimizedJokerBot;
 use crate::bots::play_in_melds::UseMeldBot;
 use crate::bots::play_with_sequence::SequenceBot;
 use crate::bots::use_joker::UseJokerBot;
