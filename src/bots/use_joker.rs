@@ -21,14 +21,14 @@ pub struct UseJokerBot {
     pub features: Vec<String>,
 
     // State for calculation
-    max_cards_count: i32,
-    max_value: i32,
-    best_take_rank: u32,
-    best_take_seq: u32,
-    is_melded: bool,
-    meld_cards: Vec<Meld>,
-    dp_rank_seq: Vec<i32>,
-    dp_rank_meld: Vec<i32>,
+    pub max_cards_count: i32,
+    pub max_value: i32,
+    pub best_take_rank: u32,
+    pub best_take_seq: u32,
+    pub is_melded: bool,
+    pub meld_cards: Vec<Meld>,
+    pub dp_rank_seq: Vec<i32>,
+    pub dp_rank_meld: Vec<i32>,
 }
 
 impl UseJokerBot {
@@ -47,7 +47,7 @@ impl UseJokerBot {
         }
     }
 
-    fn reset_calc_values(&mut self) {
+    pub fn reset_calc_values(&mut self) {
         self.max_cards_count = 0;
         self.max_value = 0;
         self.best_take_rank = 0;
@@ -58,7 +58,7 @@ impl UseJokerBot {
         self.dp_rank_meld = vec![-2; 32769];
     }
 
-    fn get_rank_meld(&mut self, hand: &Vec<Card>, take_rank: &u32) -> i32 {
+    pub fn get_rank_meld(&mut self, hand: &Vec<Card>, take_rank: &u32) -> i32 {
         let take_rank_index = *take_rank as usize;
         if self.dp_rank_meld[take_rank_index] != -2 {
             return self.dp_rank_meld[take_rank_index];
@@ -194,7 +194,7 @@ impl UseJokerBot {
         melds_val
     }
 
-    fn get_seq_meld(&mut self, hand: &Vec<Card>, take_seq: &u32) -> i32 {
+    pub fn get_seq_meld(&mut self, hand: &Vec<Card>, take_seq: &u32) -> i32 {
         // print the ones and zeros of take_seq
         let take_seq_index = *take_seq as usize;
         if self.dp_rank_seq[take_seq_index] != -2 {
@@ -209,6 +209,7 @@ impl UseJokerBot {
                 continue;
             }
             let card = &hand[i];
+
             if card.rank == Rank::Joker {
                 joker_cards.push(card);
             } else {
@@ -535,6 +536,7 @@ impl UseJokerBot {
                 return -1;
             }
 
+            // Add ace cards
             while let Some(ace_card) = aces_cards.pop() {
                 let mut add_to: Option<usize> = None;
                 let mut is_left = false;
@@ -567,22 +569,37 @@ impl UseJokerBot {
                 }
             }
 
+            // Add joker cards
             while let Some(joker_card) = joker_cards.pop() {
                 let mut add_to: Option<usize> = None;
                 let mut max_value = 0;
                 let mut is_left = false;
 
                 for (i, valid_meld) in valid_meld_seqs.iter().enumerate() {
-                    if valid_meld.last().unwrap().rank != Rank::Ace {
-                        let val = rank_order(valid_meld.last().unwrap().rank)[0] + 1;
+                    let last_card = valid_meld.last().unwrap();
+                    if last_card.rank != Rank::Ace {
+                        let val = match last_card.rank {
+                            Rank::Number(n) if n >= 2 && n <= 9 => {
+                                rank_order(last_card.rank)[0] + 1
+                            }
+                            Rank::King => 11,
+                            _ => 10,
+                        };
                         if val > max_value {
                             max_value = val;
                             add_to = Some(i);
                             is_left = false;
                         }
                     }
-                    if valid_meld[0].rank != Rank::Ace {
-                        let val = rank_order(valid_meld[0].rank)[0] - 1;
+                    let first_card = valid_meld[0];
+                    if first_card.rank != Rank::Ace {
+                        let val = match first_card.rank {
+                            Rank::Number(n) if n >= 3 && n <= 10 => {
+                                rank_order(first_card.rank)[0] - 1
+                            }
+                            Rank::Number(2) => 11,
+                            _ => 10,
+                        };
                         if val > max_value {
                             max_value = val;
                             add_to = Some(i);
@@ -620,12 +637,11 @@ impl UseJokerBot {
         //     }
         //     println!("{:?}", hand[i])
         // }
-        // std::process::exit(0);
         self.dp_rank_seq[take_seq_index] = res;
         res
     }
 
-    fn get_rank_meld_cards(&self, rank_cards: &Vec<Card>) -> Vec<Meld> {
+    pub fn get_rank_meld_cards(&self, rank_cards: &Vec<Card>) -> Vec<Meld> {
         let mut melds: Vec<Meld> = Vec::new();
         let cards: Vec<Card> = rank_cards
             .iter()
@@ -873,7 +889,7 @@ impl UseJokerBot {
         melds
     }
 
-    fn get_seq_meld_cards(&self, seq_cards: &Vec<Card>) -> Vec<Meld> {
+    pub fn get_seq_meld_cards(&self, seq_cards: &Vec<Card>) -> Vec<Meld> {
         let cards: Vec<Card> = seq_cards
             .iter()
             .filter(|c| c.rank != Rank::Joker)
@@ -1190,25 +1206,39 @@ impl UseJokerBot {
             }
 
             while let Some(joker_card) = joker_cards.pop() {
-                let mut add_to = -1;
+                let mut add_to: i8 = -1;
                 let mut max_value = 0;
                 let mut is_left = false;
 
                 for (i, valid_meld) in valid_meld_seqs.iter().enumerate() {
-                    if valid_meld.last().unwrap().rank != Rank::Ace {
-                        let val = rank_order(valid_meld.last().unwrap().rank)[0] + 1;
+                    let last_card = valid_meld.last().unwrap();
+                    if last_card.rank != Rank::Ace {
+                        let val = match last_card.rank {
+                            Rank::Number(n) if n >= 2 && n <= 9 => {
+                                rank_order(last_card.rank)[0] + 1
+                            }
+                            Rank::King => 11,
+                            _ => 10,
+                        };
                         if val > max_value {
                             max_value = val;
-                            add_to = i as i32;
+                            add_to = i as i8;
                             is_left = false;
                         }
                     }
-                    if valid_meld[0].rank != Rank::Ace {
-                        let val = rank_order(valid_meld[0].rank)[0] - 1;
+                    let first_card = &valid_meld[0];
+                    if first_card.rank != Rank::Ace {
+                        let val = match first_card.rank {
+                            Rank::Number(n) if n >= 3 && n <= 10 => {
+                                rank_order(first_card.rank)[0] - 1
+                            }
+                            Rank::Number(2) => 11,
+                            _ => 10,
+                        };
                         if val > max_value {
                             max_value = val;
-                            add_to = i as i32;
-                            is_left = false;
+                            add_to = i as i8;
+                            is_left = true;
                         }
                     }
                 }
@@ -1329,12 +1359,12 @@ impl BotStrategy for UseJokerBot {
     fn find_melds(&mut self, hand: &Vec<Card>) -> Vec<Meld> {
         self.reset_calc_values();
 
-        let start = std::time::Instant::now();
+        // let start = std::time::Instant::now();
 
         self.calc(hand);
-        println!("calc time: {:?}ms", start.elapsed().as_millis());
+        // println!("calc time: {:?}ms", start.elapsed().as_millis());
 
-        println!("{} {}", self.max_value, self.max_cards_count);
+        // println!("{} {}", self.max_value, self.max_cards_count);
 
         if self.max_cards_count > 0 {
             let mut rank_cards = Vec::new();
@@ -1352,7 +1382,7 @@ impl BotStrategy for UseJokerBot {
         }
 
         self.meld_cards.clone()
-    } // Note Ace card calculation is not right
+    }
 
     fn decide_melds(&mut self, state: &RoundState) -> Vec<Meld> {
         let player = &state.players[state.current_player];
@@ -1419,3 +1449,8 @@ impl BotStrategy for UseJokerBot {
         }
     }
 }
+
+// Include test module
+#[cfg(test)]
+#[path = "./use_joker_test.rs"]
+mod use_joker_test;
