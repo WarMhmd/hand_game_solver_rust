@@ -306,8 +306,7 @@ pub fn melds_value(melds: &Vec<Meld>) -> i32 {
 
 pub fn valid_sequence_two_cards(left: &Card, right: &Card) -> bool {
     if left.rank == Rank::Joker || right.rank == Rank::Joker {
-        return (right.rank == Rank::Joker && left.rank != Rank::Ace)
-            || (left.rank == Rank::Joker && right.rank != Rank::Ace);
+        return true;
     }
     if left.rank == Rank::Ace && right.rank == Rank::Number(2) {
         return true;
@@ -339,7 +338,7 @@ pub fn check_melds(state: &mut RoundState) {
         if valid_rank_meld(&meld.cards) {
             if meld.cards.len() == 4 && meld.cards.iter().all(|c| c.rank != Rank::Joker) {
                 for c in &meld.cards {
-                    state.fire_pile.push(c.clone());
+                    state.fire_pile.insert(state.fire_pile.len() / 2, c.clone());
                 }
                 remove_index.push(index);
             }
@@ -349,11 +348,17 @@ pub fn check_melds(state: &mut RoundState) {
             if meld.cards.len() >= 6 {
                 remove_index.push(index);
                 for i in (0..meld.cards.len()).step_by(3) {
-                    if i + 3 <= meld.cards.len() {
+                    if i + 3 <= meld.cards.len() && i + 6 <= meld.cards.len() {
                         added_melds.push(Meld {
                             cards: meld.cards[i..i + 3].to_vec(),
                             meld_type: MeldType::Sequence,
                         });
+                    } else {
+                        added_melds.push(Meld {
+                            cards: meld.cards[i..].to_vec(),
+                            meld_type: MeldType::Sequence,
+                        });
+                        break;
                     }
                 }
             }
@@ -417,6 +422,12 @@ pub fn valid_sequence_meld(cards: &Vec<Card>) -> bool {
 
     for i in 1..cards.len() {
         if !valid_sequence_two_cards(&cards[i - 1], &cards[i]) {
+            return false;
+        }
+        if i == 1 && cards[i - 1].rank == Rank::Joker && cards[i].rank == Rank::Ace {
+            return false;
+        }
+        if i == cards.len() - 1 && cards[i].rank == Rank::Joker && cards[i - 1].rank == Rank::Ace {
             return false;
         }
         if cards[i].rank == Rank::Joker {
@@ -543,15 +554,16 @@ pub fn draw_from_deck(state: &mut RoundState) {
     if state.phase != Phase::Draw {
         panic!("Not draw phase");
     }
-    let mut card = state.deck.remove(0);
 
     if state.deck.is_empty() {
         state.deck = shuffle(state.fire_pile.clone());
         state.fire_pile.clear();
-        card = state.deck.remove(0);
     }
 
+    let card = state.deck.remove(0);
+
     state.players[state.current_player].hand.push(card);
+    state.players[state.current_player].fire_card_id = None;
 }
 
 pub fn draw_from_fire(state: &mut RoundState) {
@@ -616,6 +628,15 @@ pub fn lay_melds(state: &mut RoundState, melds: Vec<Meld>) {
                 .iter()
                 .any(|m| m.cards.iter().any(|c| c.id == *fire_id))
             {
+                // print fire card
+                println!("Fire Card: {:?}", fire_id);
+                for m in &melds {
+                    println!("Meld Type: {:?}", m.meld_type);
+                    for c in &m.cards {
+                        println!("{:?}", c);
+                    }
+                    println!("==========================");
+                }
                 panic!("Fire card not used in meld");
             }
         }
@@ -748,9 +769,6 @@ pub fn score_round(game_state: &mut GameState, round_state: &mut RoundState) {
         .id
         .clone();
 
-    // In our Rust architecture, game_state.players is empty here because we drained it in init_round.
-    // We update the scores directly on the ActivePlayers in round_state, then move them back.
-
     for rp in &mut round_state.players {
         if rp.id != winner_id {
             if !rp.melded {
@@ -781,3 +799,8 @@ pub fn score_round(game_state: &mut GameState, round_state: &mut RoundState) {
     players_back.sort_by_key(|p| p.id.clone());
     game_state.players = players_back;
 }
+
+// Include test module
+#[cfg(test)]
+#[path = "logic_test.rs"]
+mod logic_test;

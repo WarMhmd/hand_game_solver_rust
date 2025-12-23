@@ -1,15 +1,16 @@
 mod bot;
 mod logic;
 mod bots {
-    pub mod optimized_use_joker;
     pub mod play_in_melds;
     pub mod play_with_sequence;
+    pub mod use_fire;
     pub mod use_joker;
 }
 
 use crate::bot::{BotStrategy, DecideDrawResult, RandomBot, RankBot};
 use crate::bots::play_in_melds::UseMeldBot;
 use crate::bots::play_with_sequence::SequenceBot;
+use crate::bots::use_fire::UseFireBot;
 use crate::bots::use_joker::UseJokerBot;
 use crate::logic::{
     discard_card, discard_fire_card, draw_from_deck, draw_from_fire, init_game, init_round,
@@ -25,10 +26,10 @@ struct BotResult {
 
 fn play_full_game(rounds: i32) {
     let mut players: Vec<Box<dyn BotStrategy>> = vec![
-        Box::new(RankBot::new("RandomBot".to_string())),
-        Box::new(RankBot::new("RandomBot-1".to_string())),
-        Box::new(RankBot::new("RandomBot-2".to_string())),
-        Box::new(UseJokerBot::new("UseOptimizedjokerBot".to_string())),
+        Box::new(RankBot::new("RankBot".to_string())),
+        Box::new(UseMeldBot::new("UseMeldBot".to_string())),
+        Box::new(UseJokerBot::new("UseJokerBot".to_string())),
+        Box::new(UseFireBot::new("UseFireBot".to_string())),
     ];
 
     let mut results: Vec<BotResult> = players
@@ -42,8 +43,6 @@ fn play_full_game(rounds: i32) {
 
     println!("=== HAND GAME SIMULATION START ===");
 
-    // We can't move players into init_game and keep them in `players` var easily.
-    // So we pass Option<Box>
     let player_names: Vec<String> = players.iter().map(|p| p.name().to_string()).collect();
     let strategies: Vec<Option<Box<dyn BotStrategy>>> =
         players.drain(..).map(|p| Some(p)).collect();
@@ -70,7 +69,7 @@ fn play_full_game(rounds: i32) {
             }
 
             round_break += 1;
-            if round_break > 1000 {
+            if round_break > 10000 {
                 println!("Round timed out");
                 break;
             }
@@ -173,7 +172,9 @@ fn play_full_game(rounds: i32) {
             }
         }
 
-        if round_break <= 1000 {
+        if round_break <= 10000 {
+            // print rounds used
+            println!("Rounds used: {}", round_break);
             let winner = round_state
                 .players
                 .iter()
@@ -234,5 +235,5 @@ fn play_full_game(rounds: i32) {
 }
 
 fn main() {
-    play_full_game(4);
+    play_full_game(100);
 }

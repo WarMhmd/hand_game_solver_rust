@@ -1,4 +1,4 @@
-use crate::logic::{Card, Meld, RoundState, Rank, Suit};
+use crate::logic::{Card, Meld, Rank, RoundState, Suit};
 use std::collections::HashMap;
 
 pub enum DecideDrawResult {
@@ -51,7 +51,10 @@ pub struct RandomBot {
 
 impl RandomBot {
     pub fn new(name: String) -> Self {
-        Self { name, features: vec![] }
+        Self {
+            name,
+            features: vec![],
+        }
     }
 }
 
@@ -85,7 +88,10 @@ pub struct RankBot {
 
 impl RankBot {
     pub fn new(name: String) -> Self {
-        Self { name, features: vec![] }
+        Self {
+            name,
+            features: vec![],
+        }
     }
 }
 
@@ -110,13 +116,19 @@ impl BotStrategy for RankBot {
                     if meld.is_empty() || meld.iter().all(|c| c.suit != card.suit) {
                         meld.push(card.clone());
                         if meld.len() == 4 {
-                            melds.push(Meld { cards: meld.clone(), meld_type: crate::logic::MeldType::Rank });
+                            melds.push(Meld {
+                                cards: meld.clone(),
+                                meld_type: crate::logic::MeldType::Rank,
+                            });
                             meld = Vec::new();
                         }
                     }
                 }
                 if meld.len() >= 3 {
-                     melds.push(Meld { cards: meld, meld_type: crate::logic::MeldType::Rank });
+                    melds.push(Meld {
+                        cards: meld,
+                        meld_type: crate::logic::MeldType::Rank,
+                    });
                 }
             }
         }
@@ -134,7 +146,11 @@ impl BotStrategy for RankBot {
         let melds_cards_count: usize = melds.iter().map(|m| m.cards.len()).sum();
         let player_cards_num_after_meld = player.hand.len() as i32 - melds_cards_count as i32;
 
-        if player_cards_num_after_meld == 6 || player_cards_num_after_meld == 3 || player_cards_num_after_meld == 2 {
+        if player_cards_num_after_meld == 6
+            || player_cards_num_after_meld == 3
+            || player_cards_num_after_meld == 2
+            || player_cards_num_after_meld == 0
+        {
             return vec![];
         }
         melds
@@ -145,13 +161,15 @@ impl BotStrategy for RankBot {
         let melds = self.find_melds(hand);
 
         let discard = hand.iter().find(|card| {
-             !melds.iter().any(|meld| meld.cards.iter().any(|c| c.id == card.id))
+            !melds
+                .iter()
+                .any(|meld| meld.cards.iter().any(|c| c.id == card.id))
         });
 
         if let Some(c) = discard {
             hand.iter().position(|x| x.id == c.id).unwrap()
         } else {
-             hand.len() - 1 // Fallback
+            hand.len() - 1 // Fallback
         }
     }
 }
