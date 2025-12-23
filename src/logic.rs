@@ -193,7 +193,10 @@ pub fn shuffle(deck: Vec<Card>) -> Vec<Card> {
 // Game setup
 // --------------------
 
-pub fn init_game(player_names: Vec<String>, bot_strategies: Vec<Option<Box<dyn BotStrategy>>>) -> GameState {
+pub fn init_game(
+    player_names: Vec<String>,
+    bot_strategies: Vec<Option<Box<dyn BotStrategy>>>,
+) -> GameState {
     let players = player_names
         .into_iter()
         .enumerate()
@@ -206,10 +209,7 @@ pub fn init_game(player_names: Vec<String>, bot_strategies: Vec<Option<Box<dyn B
         })
         .collect();
 
-    GameState {
-        players,
-        round: 1,
-    }
+    GameState { players, round: 1 }
 }
 
 pub fn init_round(game_state: &mut GameState) -> RoundState {
@@ -271,7 +271,11 @@ pub fn meld_value(meld: &Meld) -> i32 {
             val += card_value(first_card);
         } else if meld.meld_type == MeldType::Sequence {
             let card_index = meld.cards.iter().position(|c| c == joker).unwrap();
-            let prev_card = if card_index > 0 { meld.cards.get(card_index - 1) } else { None };
+            let prev_card = if card_index > 0 {
+                meld.cards.get(card_index - 1)
+            } else {
+                None
+            };
             let next_card = meld.cards.get(card_index + 1);
 
             if let Some(prev) = prev_card {
@@ -283,7 +287,7 @@ pub fn meld_value(meld: &Meld) -> i32 {
                     card_value(prev) + 1 // Joker is 3-10
                 };
             } else if let Some(next) = next_card {
-                 val += if next.rank == Rank::Number(2) {
+                val += if next.rank == Rank::Number(2) {
                     11 // Joker is A
                 } else if card_value(next) == 10 && next.rank != Rank::Number(10) {
                     10
@@ -302,13 +306,24 @@ pub fn melds_value(melds: &Vec<Meld>) -> i32 {
 
 pub fn valid_sequence_two_cards(left: &Card, right: &Card) -> bool {
     if left.rank == Rank::Joker || right.rank == Rank::Joker {
-        return left.rank != Rank::Ace && right.rank != Rank::Ace;
+        return (right.rank == Rank::Joker && left.rank != Rank::Ace)
+            || (left.rank == Rank::Joker && right.rank != Rank::Ace);
     }
-    if left.rank == Rank::Ace && right.rank == Rank::Number(2) { return true; }
-    if left.rank == Rank::Number(10) && right.rank == Rank::Jack { return true; }
-    if left.rank == Rank::Jack && right.rank == Rank::Queen { return true; }
-    if left.rank == Rank::Queen && right.rank == Rank::King { return true; }
-    if left.rank == Rank::King && right.rank == Rank::Ace { return true; }
+    if left.rank == Rank::Ace && right.rank == Rank::Number(2) {
+        return true;
+    }
+    if left.rank == Rank::Number(10) && right.rank == Rank::Jack {
+        return true;
+    }
+    if left.rank == Rank::Jack && right.rank == Rank::Queen {
+        return true;
+    }
+    if left.rank == Rank::Queen && right.rank == Rank::King {
+        return true;
+    }
+    if left.rank == Rank::King && right.rank == Rank::Ace {
+        return true;
+    }
 
     match (left.rank, right.rank) {
         (Rank::Number(l), Rank::Number(r)) => l + 1 == r,
@@ -336,7 +351,7 @@ pub fn check_melds(state: &mut RoundState) {
                 for i in (0..meld.cards.len()).step_by(3) {
                     if i + 3 <= meld.cards.len() {
                         added_melds.push(Meld {
-                            cards: meld.cards[i..i+3].to_vec(),
+                            cards: meld.cards[i..i + 3].to_vec(),
                             meld_type: MeldType::Sequence,
                         });
                     }
@@ -358,11 +373,20 @@ pub fn check_melds(state: &mut RoundState) {
 // --------------------
 
 pub fn valid_rank_meld(meld_cards: &Vec<Card>) -> bool {
-    if meld_cards.len() < 3 || meld_cards.len() > 4 { return false; }
-    if meld_cards.iter().filter(|c| c.rank == Rank::Joker).count() > 1 { return false; }
+    if meld_cards.len() < 3 || meld_cards.len() > 4 {
+        return false;
+    }
+    if meld_cards.iter().filter(|c| c.rank == Rank::Joker).count() > 1 {
+        return false;
+    }
 
-    let cards: Vec<&Card> = meld_cards.iter().filter(|c| c.rank != Rank::Joker).collect();
-    if cards.is_empty() { return false; }
+    let cards: Vec<&Card> = meld_cards
+        .iter()
+        .filter(|c| c.rank != Rank::Joker)
+        .collect();
+    if cards.is_empty() {
+        return false;
+    }
 
     let same_rank = cards.iter().all(|c| c.rank == cards[0].rank);
     let mut suits = std::collections::HashSet::new();
@@ -375,20 +399,34 @@ pub fn valid_rank_meld(meld_cards: &Vec<Card>) -> bool {
 }
 
 pub fn valid_sequence_meld(cards: &Vec<Card>) -> bool {
-    if cards.len() < 3 { return false; }
-    if cards.iter().filter(|c| c.rank == Rank::Joker).count() > 1 { return false; }
+    if cards.len() < 3 {
+        return false;
+    }
+    if cards.iter().filter(|c| c.rank == Rank::Joker).count() > 1 {
+        return false;
+    }
 
     let first_card = cards.iter().find(|c| c.rank != Rank::Joker).unwrap();
-    let same_suit = cards.iter().all(|c| c.rank == Rank::Joker || c.suit == first_card.suit);
+    let same_suit = cards
+        .iter()
+        .all(|c| c.rank == Rank::Joker || c.suit == first_card.suit);
 
-    if !same_suit { return false; }
+    if !same_suit {
+        return false;
+    }
 
     for i in 1..cards.len() {
-        if !valid_sequence_two_cards(&cards[i-1], &cards[i]) { return false; }
+        if !valid_sequence_two_cards(&cards[i - 1], &cards[i]) {
+            return false;
+        }
         if cards[i].rank == Rank::Joker {
-            if i == cards.len() - 1 { continue; }
-            let next_card = &cards[i+1];
-            if card_value(next_card) != card_value(&cards[i-1]) + 2 { return false; }
+            if i == cards.len() - 1 {
+                continue;
+            }
+            let next_card = &cards[i + 1];
+            if *rank_order(next_card.rank).last().unwrap() != rank_order(cards[i - 1].rank)[0] + 2 {
+                return false;
+            }
         }
     }
     true
@@ -399,18 +437,34 @@ pub fn valid_sequence_meld(cards: &Vec<Card>) -> bool {
 pub fn can_play_in_rank_meld(meld: &Meld, card: &Card) -> (bool, bool) {
     let joker_card = meld.cards.iter().find(|c| c.rank == Rank::Joker);
 
-    if joker_card.is_some() && card.rank == Rank::Joker { return (false, false); }
+    if joker_card.is_some() && card.rank == Rank::Joker {
+        return (false, false);
+    }
 
     let mut copy_meld = meld.cards.clone();
     let mut take_joker = false;
 
     if joker_card.is_some() && copy_meld.len() == 4 {
-        copy_meld = copy_meld.into_iter().map(|c| if c.rank == Rank::Joker { card.clone() } else { c }).collect();
-        if !valid_rank_meld(&copy_meld) { return (false, false); }
-        else { take_joker = true; }
+        copy_meld = copy_meld
+            .into_iter()
+            .map(|c| {
+                if c.rank == Rank::Joker {
+                    card.clone()
+                } else {
+                    c
+                }
+            })
+            .collect();
+        if !valid_rank_meld(&copy_meld) {
+            return (false, false);
+        } else {
+            take_joker = true;
+        }
     } else {
         copy_meld.push(card.clone());
-        if !valid_rank_meld(&copy_meld) { return (false, false); }
+        if !valid_rank_meld(&copy_meld) {
+            return (false, false);
+        }
     }
 
     (true, take_joker)
@@ -419,31 +473,52 @@ pub fn can_play_in_rank_meld(meld: &Meld, card: &Card) -> (bool, bool) {
 pub fn can_play_in_sequence_meld(meld: &Meld, card: &Card, play_end: bool) -> (bool, bool) {
     let joker_card = meld.cards.iter().find(|c| c.rank == Rank::Joker);
 
-    if joker_card.is_some() && card.rank == Rank::Joker { return (false, false); }
+    if joker_card.is_some() && card.rank == Rank::Joker {
+        return (false, false);
+    }
 
     if joker_card.is_some() {
         let mut copy_meld = meld.cards.clone();
-        copy_meld = copy_meld.into_iter().map(|c| if c.rank == Rank::Joker { card.clone() } else { c }).collect();
-        if valid_sequence_meld(&copy_meld) { return (true, true); }
+        copy_meld = copy_meld
+            .into_iter()
+            .map(|c| {
+                if c.rank == Rank::Joker {
+                    card.clone()
+                } else {
+                    c
+                }
+            })
+            .collect();
+        if valid_sequence_meld(&copy_meld) {
+            return (true, true);
+        }
     }
 
     if card.rank != Rank::Joker {
         let mut copy_meld = meld.cards.clone();
         copy_meld.insert(0, card.clone());
-        if valid_sequence_meld(&copy_meld) { return (true, false); }
+        if valid_sequence_meld(&copy_meld) {
+            return (true, false);
+        }
 
         copy_meld = meld.cards.clone();
         copy_meld.push(card.clone());
-        if valid_sequence_meld(&copy_meld) { return (true, false); }
+        if valid_sequence_meld(&copy_meld) {
+            return (true, false);
+        }
     } else {
         if !play_end {
             let mut copy_meld = meld.cards.clone();
             copy_meld.insert(0, card.clone());
-            if valid_sequence_meld(&copy_meld) { return (true, false); }
+            if valid_sequence_meld(&copy_meld) {
+                return (true, false);
+            }
         } else {
             let mut copy_meld = meld.cards.clone();
             copy_meld.push(card.clone());
-            if valid_sequence_meld(&copy_meld) { return (true, false); }
+            if valid_sequence_meld(&copy_meld) {
+                return (true, false);
+            }
         }
     }
 
@@ -451,8 +526,12 @@ pub fn can_play_in_sequence_meld(meld: &Meld, card: &Card, play_end: bool) -> (b
 }
 
 pub fn is_valid_set(meld: &Meld) -> bool {
-    if meld.meld_type == MeldType::Rank && valid_rank_meld(&meld.cards) { return true; }
-    if meld.meld_type == MeldType::Sequence && valid_sequence_meld(&meld.cards) { return true; }
+    if meld.meld_type == MeldType::Rank && valid_rank_meld(&meld.cards) {
+        return true;
+    }
+    if meld.meld_type == MeldType::Sequence && valid_sequence_meld(&meld.cards) {
+        return true;
+    }
     false
 }
 
@@ -461,20 +540,24 @@ pub fn is_valid_set(meld: &Meld) -> bool {
 // --------------------
 
 pub fn draw_from_deck(state: &mut RoundState) {
-    if state.phase != Phase::Draw { panic!("Not draw phase"); }
+    if state.phase != Phase::Draw {
+        panic!("Not draw phase");
+    }
     let mut card = state.deck.remove(0);
 
     if state.deck.is_empty() {
-         state.deck = shuffle(state.fire_pile.clone());
-         state.fire_pile.clear();
-         card = state.deck.remove(0);
+        state.deck = shuffle(state.fire_pile.clone());
+        state.fire_pile.clear();
+        card = state.deck.remove(0);
     }
 
     state.players[state.current_player].hand.push(card);
 }
 
 pub fn draw_from_fire(state: &mut RoundState) {
-    if state.phase != Phase::Draw { panic!("Not draw phase"); }
+    if state.phase != Phase::Draw {
+        panic!("Not draw phase");
+    }
     if let Some(card) = state.fire_pile.pop() {
         state.players[state.current_player].hand.push(card.clone());
         state.players[state.current_player].fire_card_id = Some(card.id);
@@ -485,7 +568,9 @@ pub fn draw_from_fire(state: &mut RoundState) {
 
 pub fn discard_fire_card(state: &mut RoundState) {
     let player = &mut state.players[state.current_player];
-    if player.fire_card_id.is_none() { panic!("No fire card to discard"); }
+    if player.fire_card_id.is_none() {
+        panic!("No fire card to discard");
+    }
 
     let fire_id = player.fire_card_id.as_ref().unwrap().clone();
     let card_idx = player.hand.iter().position(|c| c.id == fire_id);
@@ -500,8 +585,20 @@ pub fn discard_fire_card(state: &mut RoundState) {
 }
 
 pub fn lay_melds(state: &mut RoundState, melds: Vec<Meld>) {
-    if melds.is_empty() { panic!("No melds to lay"); }
-    if !melds.iter().all(|m| is_valid_set(m)) { panic!("Invalid meld"); }
+    if melds.is_empty() {
+        panic!("No melds to lay");
+    }
+    if !melds.iter().all(|m| is_valid_set(m)) {
+        // print all melds
+        for m in &melds {
+            println!("Meld Type: {:?}", m.meld_type);
+            for c in &m.cards {
+                println!("{:?}", c);
+            }
+            println!("==========================");
+        }
+        panic!("Invalid meld");
+    }
 
     let player_idx = state.current_player;
     // We must borrow player immutably first to check checks
@@ -509,13 +606,18 @@ pub fn lay_melds(state: &mut RoundState, melds: Vec<Meld>) {
         let player = &state.players[player_idx];
         if !player.melded {
             let score = melds_value(&melds);
-            if score < 51 { panic!("Total meld score must be >= 51"); }
+            if score < 51 {
+                panic!("Total meld score must be >= 51");
+            }
         }
 
         if let Some(fire_id) = &player.fire_card_id {
-             if !melds.iter().any(|m| m.cards.iter().any(|c| c.id == *fire_id)) {
-                 panic!("Fire card not used in meld");
-             }
+            if !melds
+                .iter()
+                .any(|m| m.cards.iter().any(|c| c.id == *fire_id))
+            {
+                panic!("Fire card not used in meld");
+            }
         }
     }
 
@@ -540,29 +642,41 @@ pub fn play_in_meld(state: &mut RoundState, card: Card, meld_index: usize) {
     let player_idx = state.current_player;
 
     // Checks
-    if meld_index >= state.table_melds.len() { panic!("Meld not found"); }
+    if meld_index >= state.table_melds.len() {
+        panic!("Meld not found");
+    }
     let meld_type = state.table_melds[meld_index].meld_type.clone();
 
     {
         let player = &state.players[player_idx];
-        if !player.hand.iter().any(|c| c.id == card.id) { panic!("Card not in hand"); }
-        if player.hand.len() == 1 { panic!("Cannot play last card in hand"); }
+        if !player.hand.iter().any(|c| c.id == card.id) {
+            panic!("Card not in hand");
+        }
+        if player.hand.len() == 1 {
+            panic!("Cannot play last card in hand");
+        }
     }
 
     // Logic
     if meld_type == MeldType::Rank {
         let meld = &state.table_melds[meld_index];
         let (success, take_joker) = can_play_in_rank_meld(meld, &card);
-        if !success { return; }
+        if !success {
+            return;
+        }
 
         let mut joker_to_return: Option<Card> = None;
         if take_joker {
-             let meld_mut = &mut state.table_melds[meld_index];
-             let joker_idx = meld_mut.cards.iter().position(|c| c.rank == Rank::Joker).unwrap();
-             joker_to_return = Some(meld_mut.cards[joker_idx].clone());
-             meld_mut.cards[joker_idx] = card.clone();
+            let meld_mut = &mut state.table_melds[meld_index];
+            let joker_idx = meld_mut
+                .cards
+                .iter()
+                .position(|c| c.rank == Rank::Joker)
+                .unwrap();
+            joker_to_return = Some(meld_mut.cards[joker_idx].clone());
+            meld_mut.cards[joker_idx] = card.clone();
         } else {
-             state.table_melds[meld_index].cards.push(card.clone());
+            state.table_melds[meld_index].cards.push(card.clone());
         }
 
         let player = &mut state.players[player_idx];
@@ -576,16 +690,22 @@ pub fn play_in_meld(state: &mut RoundState, card: Card, meld_index: usize) {
     if meld_type == MeldType::Sequence {
         let meld = &state.table_melds[meld_index];
         let (success, take_joker) = can_play_in_sequence_meld(meld, &card, false);
-        if !success { return; }
+        if !success {
+            return;
+        }
 
         let mut joker_to_return: Option<Card> = None;
-         if take_joker {
-             let meld_mut = &mut state.table_melds[meld_index];
-             let joker_idx = meld_mut.cards.iter().position(|c| c.rank == Rank::Joker).unwrap();
-             joker_to_return = Some(meld_mut.cards[joker_idx].clone());
-             meld_mut.cards[joker_idx] = card.clone();
+        if take_joker {
+            let meld_mut = &mut state.table_melds[meld_index];
+            let joker_idx = meld_mut
+                .cards
+                .iter()
+                .position(|c| c.rank == Rank::Joker)
+                .unwrap();
+            joker_to_return = Some(meld_mut.cards[joker_idx].clone());
+            meld_mut.cards[joker_idx] = card.clone();
         } else {
-             state.table_melds[meld_index].cards.push(card.clone());
+            state.table_melds[meld_index].cards.push(card.clone());
         }
 
         let player = &mut state.players[player_idx];
@@ -600,7 +720,9 @@ pub fn play_in_meld(state: &mut RoundState, card: Card, meld_index: usize) {
 }
 
 pub fn discard_card(state: &mut RoundState, card_index: usize) {
-    if state.phase != Phase::Discard { panic!("Not discard phase"); }
+    if state.phase != Phase::Discard {
+        panic!("Not discard phase");
+    }
 
     let player = &mut state.players[state.current_player];
     let card = player.hand.remove(card_index);
@@ -618,7 +740,13 @@ pub fn is_round_over(state: &RoundState) -> bool {
 }
 
 pub fn score_round(game_state: &mut GameState, round_state: &mut RoundState) {
-    let winner_id = round_state.players.iter().find(|p| p.hand.is_empty()).unwrap().id.clone();
+    let winner_id = round_state
+        .players
+        .iter()
+        .find(|p| p.hand.is_empty())
+        .unwrap()
+        .id
+        .clone();
 
     // In our Rust architecture, game_state.players is empty here because we drained it in init_round.
     // We update the scores directly on the ActivePlayers in round_state, then move them back.
@@ -641,12 +769,12 @@ pub fn score_round(game_state: &mut GameState, round_state: &mut RoundState) {
     let mut players_back = Vec::new();
     // drain gives us ownership of ActivePlayer (rp)
     for rp in round_state.players.drain(..) {
-         players_back.push(Player {
-             id: rp.id,
-             name: rp.name,
-             bot_strategy: rp.bot_strategy, // Move the strategy back
-             score: rp.score, // Use the updated score from the ActivePlayer
-         });
+        players_back.push(Player {
+            id: rp.id,
+            name: rp.name,
+            bot_strategy: rp.bot_strategy, // Move the strategy back
+            score: rp.score,               // Use the updated score from the ActivePlayer
+        });
     }
 
     // Sort to ensure order P1..P4 (optional but good for consistency)

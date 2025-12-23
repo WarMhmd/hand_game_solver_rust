@@ -3,7 +3,7 @@ use crate::logic::{
     can_play_in_rank_meld, can_play_in_sequence_meld, melds_value, rank_order, rank_value_int,
     valid_sequence_two_cards, Card, Meld, MeldType, Rank, RoundState, Suit,
 };
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 macro_rules! update_max_and_next {
     ($rank:expr, $max:expr, $next:expr) => {
@@ -27,6 +27,8 @@ pub struct UseJokerBot {
     best_take_seq: u32,
     is_melded: bool,
     meld_cards: Vec<Meld>,
+    dp_rank_seq: Vec<i32>,
+    dp_rank_meld: Vec<i32>,
 }
 
 impl UseJokerBot {
@@ -40,6 +42,8 @@ impl UseJokerBot {
             best_take_seq: 0,
             is_melded: false,
             meld_cards: Vec::new(),
+            dp_rank_seq: Vec::new(),
+            dp_rank_meld: Vec::new(),
         }
     }
 
@@ -50,9 +54,16 @@ impl UseJokerBot {
         self.best_take_seq = 0;
         self.is_melded = false;
         self.meld_cards = Vec::new();
+        self.dp_rank_seq = vec![-2; 32769];
+        self.dp_rank_meld = vec![-2; 32769];
     }
 
-    fn get_rank_meld(&self, hand: &Vec<Card>, take_rank: &u32) -> i32 {
+    fn get_rank_meld(&mut self, hand: &Vec<Card>, take_rank: &u32) -> i32 {
+        let take_rank_index = *take_rank as usize;
+        if self.dp_rank_meld[take_rank_index] != -2 {
+            return self.dp_rank_meld[take_rank_index];
+        }
+
         let mut melds_val = 0;
 
         let mut joker_count = 0;
@@ -69,7 +80,10 @@ impl UseJokerBot {
                 joker_count += 1;
             } else {
                 let mut j = 0;
-                while j < groups.len() {
+                while j < 13 {
+                    if j >= groups.len() {
+                        groups.push(Vec::new());
+                    }
                     if groups[j].is_empty() || groups[j][0].rank == hand[i].rank {
                         groups[j].push(&hand[i]);
                         break;
@@ -87,10 +101,12 @@ impl UseJokerBot {
                     if set_suit.len() == 2 {
                         joker_count -= 1;
                         if joker_count < 0 {
+                            self.dp_rank_meld[take_rank_index] = -1;
                             return -1;
                         }
                         melds_val += 3 * rank;
                     } else {
+                        self.dp_rank_meld[take_rank_index] = -1;
                         return -1;
                     }
                 }
@@ -99,6 +115,7 @@ impl UseJokerBot {
                         melds_val += 3 * rank;
                         update_max_and_next!(rank, max_can_joker_value, next_max_can_joker_value);
                     } else if set_suit.len() == 2 {
+                        self.dp_rank_meld[take_rank_index] = -1;
                         return -1;
                     }
                 }
@@ -106,10 +123,12 @@ impl UseJokerBot {
                     if set_suit.len() == 4 {
                         melds_val += 4 * rank;
                     } else if set_suit.len() == 3 {
+                        self.dp_rank_meld[take_rank_index] = -1;
                         return -1;
                     } else if set_suit.len() == 2 {
                         joker_count -= 2;
                         if joker_count < 0 {
+                            self.dp_rank_meld[take_rank_index] = -1;
                             return -1;
                         }
                         melds_val += 6 * rank;
@@ -119,6 +138,7 @@ impl UseJokerBot {
                     if set_suit.len() == 4 {
                         joker_count -= 1;
                         if joker_count < 0 {
+                            self.dp_rank_meld[take_rank_index] = -1;
                             return -1;
                         }
                         melds_val += 6 * rank;
@@ -126,6 +146,7 @@ impl UseJokerBot {
                     } else if set_suit.len() == 3 {
                         joker_count -= 1;
                         if joker_count < 0 {
+                            self.dp_rank_meld[take_rank_index] = -1;
                             return -1;
                         }
                         melds_val += 6 * rank;
@@ -150,11 +171,16 @@ impl UseJokerBot {
                         melds_val += 8 * rank;
                     }
                 }
-                _ => return -1,
+                _ => {
+                    // self.dp_rank_meld.insert(*take_rank, -1);
+                    self.dp_rank_meld[take_rank_index] = -1;
+                    return -1;
+                }
             }
         }
         if joker_count > 0 {
             if max_can_joker_value == -1 {
+                self.dp_rank_meld[take_rank_index] = -1;
                 return -1;
             }
             joker_count -= 1;
@@ -163,10 +189,17 @@ impl UseJokerBot {
                 melds_val += next_max_can_joker_value;
             }
         }
+
+        self.dp_rank_meld[take_rank_index] = melds_val;
         melds_val
     }
 
-    fn get_seq_meld(&self, hand: &Vec<Card>, take_seq: &u32) -> i32 {
+    fn get_seq_meld(&mut self, hand: &Vec<Card>, take_seq: &u32) -> i32 {
+        // print the ones and zeros of take_seq
+        let take_seq_index = *take_seq as usize;
+        if self.dp_rank_seq[take_seq_index] != -2 {
+            return self.dp_rank_seq[take_seq_index];
+        }
         let mut joker_cards: Vec<&Card> = Vec::with_capacity(2);
         // Pre-allocate groups with proper capacity
         let mut groups: [Vec<&Card>; 4] = [Vec::new(), Vec::new(), Vec::new(), Vec::new()];
@@ -189,6 +222,7 @@ impl UseJokerBot {
                     }
                 }
                 if !placed {
+                    self.dp_rank_seq[take_seq_index] = -1;
                     return -1; // More than 4 suits, impossible
                 }
             }
@@ -213,6 +247,8 @@ impl UseJokerBot {
             }
 
             if new_cards.is_empty() {
+                // self.dp_rank_seq.insert(*take_seq, -1);
+                self.dp_rank_seq[take_seq_index] = -1;
                 return -1;
             }
 
@@ -329,6 +365,8 @@ impl UseJokerBot {
                     continue;
                 }
                 if joker_cards.is_empty() {
+                    // self.dp_rank_seq.insert(*take_seq, -1);
+                    self.dp_rank_seq[take_seq_index] = -1;
                     return -1;
                 }
 
@@ -454,6 +492,8 @@ impl UseJokerBot {
                         valid_meld_seqs.push(new_m);
                         continue;
                     } else {
+                        // self.dp_rank_seq.insert(*take_seq, -1);
+                        self.dp_rank_seq[take_seq_index] = -1;
                         return -1;
                     }
                 } else if meld.len() == 1 {
@@ -471,9 +511,13 @@ impl UseJokerBot {
                             valid_meld_seqs.push(vec![joker_card, meld[0], ace_card]);
                             continue;
                         } else {
+                            // self.dp_rank_seq.insert(*take_seq, -1);
+                            self.dp_rank_seq[take_seq_index] = -1;
                             return -1;
                         }
                     } else {
+                        // self.dp_rank_seq.insert(*take_seq, -1);
+                        self.dp_rank_seq[take_seq_index] = -1;
                         return -1;
                     }
                 }
@@ -486,6 +530,8 @@ impl UseJokerBot {
                 .collect();
             invalid_meld_seqs = temp;
             if !invalid_meld_seqs.is_empty() {
+                // self.dp_rank_seq.insert(*take_seq, -1);
+                self.dp_rank_seq[take_seq_index] = -1;
                 return -1;
             }
 
@@ -515,6 +561,8 @@ impl UseJokerBot {
                         valid_meld_seqs[idx].push(ace_card);
                     }
                 } else {
+                    // self.dp_rank_seq.insert(*take_seq, -1);
+                    self.dp_rank_seq[take_seq_index] = -1;
                     return -1;
                 }
             }
@@ -549,6 +597,8 @@ impl UseJokerBot {
                         valid_meld_seqs[idx].push(joker_card);
                     }
                 } else {
+                    // self.dp_rank_seq.insert(*take_seq, -1);
+                    self.dp_rank_seq[take_seq_index] = -1;
                     return -1;
                 }
             }
@@ -562,7 +612,17 @@ impl UseJokerBot {
             }));
         }
 
-        melds_value(&all_melds)
+        let res = melds_value(&all_melds);
+        // println!("{}", res);
+        // for i in 0..hand.len() {
+        //     if 1 & (take_seq >> i) == 0 {
+        //         continue;
+        //     }
+        //     println!("{:?}", hand[i])
+        // }
+        // std::process::exit(0);
+        self.dp_rank_seq[take_seq_index] = res;
+        res
     }
 
     fn get_rank_meld_cards(&self, rank_cards: &Vec<Card>) -> Vec<Meld> {
@@ -1171,64 +1231,87 @@ impl UseJokerBot {
         all_melds
     }
 
-    fn calc(&mut self, hand: &Vec<Card>, index: usize, take_rank: u32, take_seq: u32) {
-        if index == hand.len() {
-            if take_rank.count_ones() < 3 || take_seq.count_ones() < 3 {
-                return;
-            }
-            let size = take_rank.count_ones() + take_seq.count_ones();
-            if size as usize == hand.len() {
-                return;
-            }
+    fn calc(&mut self, hand: &Vec<Card>) {
+        let n = hand.len() as u32;
+        let limit = 1u32 << n;
 
-            // let rank_value = self.get_rank_meld(hand, &take_rank);
-            // if rank_value == -1 {
-            //     return;
-            // }
-            let seq_value = self.get_seq_meld(hand, &take_seq);
-            if seq_value == -1 {
-                return;
+        for take_rank in 0..limit {
+            if take_rank.count_ones() >= 3 {
+                self.get_rank_meld(hand, &take_rank);
             }
-
-            // let total_val = rank_value;
-
-            // if self.is_melded {
-            //     if self.max_cards_count < size as i32 {
-            //         self.max_cards_count = size as i32;
-            //         self.max_value = total_val;
-            //         self.best_take_rank = take_rank;
-            //         self.best_take_seq = take_seq;
-            //     } else if self.max_cards_count == size as i32 {
-            //         if total_val > self.max_value {
-            //             self.max_value = total_val;
-            //             self.best_take_rank = take_rank;
-            //             self.best_take_seq = take_seq;
-            //         }
-            //     }
-            // } else {
-            //     if self.max_value < total_val {
-            //         self.max_value = total_val;
-            //         self.max_cards_count = size as i32;
-            //         self.best_take_rank = take_rank;
-            //         self.best_take_seq = take_seq;
-            //     } else if self.max_value == total_val {
-            //             if (size as i32) > self.max_cards_count {
-            //                 self.max_cards_count = size as i32;
-            //                 self.best_take_rank = take_rank;
-            //                 self.best_take_seq = take_seq;
-            //             }
-            //     }
-            // }
-            return;
         }
-        // rank
-        self.calc(hand, index + 1, take_rank | (1 << index), take_seq);
+        for take_seq in 0..limit {
+            if take_seq.count_ones() >= 3 {
+                self.get_seq_meld(hand, &take_seq);
+            }
+        }
+        for take_rank in 0..limit {
+            let rank_ones = take_rank.count_ones();
+            if rank_ones < 3 {
+                continue;
+            }
+            // cards NOT used in rank
+            let remaining = (!take_rank) & (limit - 1);
 
-        // sequence
-        self.calc(hand, index + 1, take_rank, take_seq | (1 << index));
+            // iterate ALL submasks of remaining
+            let mut take_seq = remaining;
+            loop {
+                let seq_ones = take_seq.count_ones();
+                'check_value: {
+                    if seq_ones >= 3 {
+                        let size = rank_ones + seq_ones;
+                        if size == n {
+                            break 'check_value;
+                        }
 
-        // ignore
-        self.calc(hand, index + 1, take_rank, take_seq);
+                        let rank_value = self.dp_rank_meld[take_rank as usize];
+                        if rank_value == -1 {
+                            break 'check_value;
+                        }
+                        let seq_value = self.dp_rank_seq[take_seq as usize];
+                        if seq_value == -1 {
+                            break 'check_value;
+                        }
+
+                        let total_val = rank_value + seq_value;
+
+                        if self.is_melded {
+                            if self.max_cards_count < size as i32 {
+                                self.max_cards_count = size as i32;
+                                self.max_value = total_val;
+                                self.best_take_rank = take_rank;
+                                self.best_take_seq = take_seq;
+                            } else if self.max_cards_count == size as i32 {
+                                if total_val > self.max_value {
+                                    self.max_value = total_val;
+                                    self.best_take_rank = take_rank;
+                                    self.best_take_seq = take_seq;
+                                }
+                            }
+                        } else {
+                            if self.max_value < total_val {
+                                self.max_value = total_val;
+                                self.max_cards_count = size as i32;
+                                self.best_take_rank = take_rank;
+                                self.best_take_seq = take_seq;
+                            } else if self.max_value == total_val {
+                                if (size as i32) > self.max_cards_count {
+                                    self.max_cards_count = size as i32;
+                                    self.best_take_rank = take_rank;
+                                    self.best_take_seq = take_seq;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if take_seq == 0 {
+                    break;
+                }
+                take_seq = (take_seq - 1) & remaining;
+            }
+        }
+        return;
     }
 }
 
@@ -1248,9 +1331,10 @@ impl BotStrategy for UseJokerBot {
 
         let start = std::time::Instant::now();
 
-        self.calc(hand, 0, 0, 0);
-
+        self.calc(hand);
         println!("calc time: {:?}ms", start.elapsed().as_millis());
+
+        println!("{} {}", self.max_value, self.max_cards_count);
 
         if self.max_cards_count > 0 {
             let mut rank_cards = Vec::new();

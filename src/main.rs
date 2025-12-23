@@ -1,17 +1,20 @@
-mod logic;
 mod bot;
+mod logic;
 mod bots {
-    pub mod play_with_sequence;
-    pub mod play_in_melds;
-    pub mod use_joker;
     pub mod optimized_use_joker;
+    pub mod play_in_melds;
+    pub mod play_with_sequence;
+    pub mod use_joker;
 }
 
-use crate::bot::{BotStrategy, RandomBot, RankBot, DecideDrawResult};
+use crate::bot::{BotStrategy, DecideDrawResult, RandomBot, RankBot};
 use crate::bots::play_in_melds::UseMeldBot;
 use crate::bots::play_with_sequence::SequenceBot;
 use crate::bots::use_joker::UseJokerBot;
-use crate::logic::{init_game, init_round, is_round_over, draw_from_deck, draw_from_fire, discard_fire_card, lay_melds, play_in_meld, discard_card, score_round, Phase, Player};
+use crate::logic::{
+    discard_card, discard_fire_card, draw_from_deck, draw_from_fire, init_game, init_round,
+    is_round_over, lay_melds, play_in_meld, score_round, Phase, Player,
+};
 
 #[derive(Clone)]
 struct BotResult {
@@ -22,24 +25,28 @@ struct BotResult {
 
 fn play_full_game(rounds: i32) {
     let mut players: Vec<Box<dyn BotStrategy>> = vec![
-        Box::new(RandomBot::new("RandomBot".to_string())),
-        Box::new(RandomBot::new("RandomBot-1".to_string())),
-        Box::new(RandomBot::new("RandomBot-2".to_string())),
+        Box::new(RankBot::new("RandomBot".to_string())),
+        Box::new(RankBot::new("RandomBot-1".to_string())),
+        Box::new(RankBot::new("RandomBot-2".to_string())),
         Box::new(UseJokerBot::new("UseOptimizedjokerBot".to_string())),
     ];
 
-    let mut results: Vec<BotResult> = players.iter().map(|p| BotResult {
-        name: p.name().to_string(),
-        total_score: 0,
-        rounds_won: 0,
-    }).collect();
+    let mut results: Vec<BotResult> = players
+        .iter()
+        .map(|p| BotResult {
+            name: p.name().to_string(),
+            total_score: 0,
+            rounds_won: 0,
+        })
+        .collect();
 
     println!("=== HAND GAME SIMULATION START ===");
 
     // We can't move players into init_game and keep them in `players` var easily.
     // So we pass Option<Box>
     let player_names: Vec<String> = players.iter().map(|p| p.name().to_string()).collect();
-    let strategies: Vec<Option<Box<dyn BotStrategy>>> = players.drain(..).map(|p| Some(p)).collect();
+    let strategies: Vec<Option<Box<dyn BotStrategy>>> =
+        players.drain(..).map(|p| Some(p)).collect();
 
     let mut game_state = init_game(player_names, strategies);
 
@@ -84,17 +91,17 @@ fn play_full_game(rounds: i32) {
 
             // DRAW PHASE
             if round_state.phase == Phase::Draw {
-                 match draw_choice {
-                     DecideDrawResult::Fire => {
-                         if !round_state.fire_pile.is_empty() {
-                             draw_from_fire(&mut round_state);
-                         } else {
-                             draw_from_deck(&mut round_state);
-                         }
-                     },
-                     DecideDrawResult::Deck => draw_from_deck(&mut round_state),
-                 }
-                 round_state.phase = Phase::Meld;
+                match draw_choice {
+                    DecideDrawResult::Fire => {
+                        if !round_state.fire_pile.is_empty() {
+                            draw_from_fire(&mut round_state);
+                        } else {
+                            draw_from_deck(&mut round_state);
+                        }
+                    }
+                    DecideDrawResult::Deck => draw_from_deck(&mut round_state),
+                }
+                round_state.phase = Phase::Meld;
             }
 
             // MELD PHASE
@@ -112,12 +119,15 @@ fn play_full_game(rounds: i32) {
                     lay_melds(&mut round_state, melds.clone());
 
                     println!("==================");
-                    println!("player {}: melded with cards", round_state.players[current_player_idx].id);
+                    println!(
+                        "player {}: melded with cards",
+                        round_state.players[current_player_idx].id
+                    );
                     for (i, m) in melds.iter().enumerate() {
-                         println!("Meld {}:", i + 1);
-                         for c in &m.cards {
-                             println!("{} {}", c.rank, c.suit);
-                         }
+                        println!("Meld {}:", i + 1);
+                        for c in &m.cards {
+                            println!("{} {}", c.rank, c.suit);
+                        }
                     }
                     println!("==================");
                     round_state.phase = Phase::PlayInMeld;
@@ -164,7 +174,11 @@ fn play_full_game(rounds: i32) {
         }
 
         if round_break <= 1000 {
-            let winner = round_state.players.iter().find(|p| p.hand.is_empty()).unwrap();
+            let winner = round_state
+                .players
+                .iter()
+                .find(|p| p.hand.is_empty())
+                .unwrap();
             let winner_name = winner.name.clone();
             let winner_id = winner.id.clone();
             println!("Round {} winner: {}", r, winner_name);
@@ -188,16 +202,16 @@ fn play_full_game(rounds: i32) {
         } else {
             // Restore players if round timed out
             let mut players_back = Vec::new();
-             for rp in round_state.players.drain(..) {
-                 players_back.push(Player {
-                     id: rp.id,
-                     name: rp.name,
-                     bot_strategy: rp.bot_strategy,
-                     score: rp.score,
-                 });
-             }
-             players_back.sort_by_key(|p| p.id.clone());
-             game_state.players = players_back;
+            for rp in round_state.players.drain(..) {
+                players_back.push(Player {
+                    id: rp.id,
+                    name: rp.name,
+                    bot_strategy: rp.bot_strategy,
+                    score: rp.score,
+                });
+            }
+            players_back.sort_by_key(|p| p.id.clone());
+            game_state.players = players_back;
         }
     }
 
@@ -205,7 +219,13 @@ fn play_full_game(rounds: i32) {
     results.sort_by(|a, b| a.total_score.cmp(&b.total_score));
 
     for (i, r) in results.iter().enumerate() {
-        println!("{}. {} | Total Score: {} | Rounds Won: {}", i + 1, r.name, r.total_score, r.rounds_won);
+        println!(
+            "{}. {} | Total Score: {} | Rounds Won: {}",
+            i + 1,
+            r.name,
+            r.total_score,
+            r.rounds_won
+        );
     }
 
     if !results.is_empty() {
