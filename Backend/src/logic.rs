@@ -1,14 +1,24 @@
-use crate::bot::{BotStrategy, DecideDrawResult};
-use crate::BotResult;
+use crate::{
+    bot::{BotStrategy, DecideDrawResult},
+    websocket::{
+        broadcast_to_game, handler::PlayingPhaseData, send_player_draw_phase_and_wait,
+        send_player_playing_phase_and_wait, send_round_start_and_wait, WsResponse,
+    },
+    AppState,
+};
+use axum::extract::ws::{Message, WebSocket};
 use rand::seq::SliceRandom;
 use rand::thread_rng;
-use std::fmt;
+use serde::{Deserialize, Serialize, Serializer};
+use std::{fmt, sync::Arc};
+use tokio::sync::{mpsc::UnboundedSender, Mutex};
+use uuid::Uuid;
 
 // --------------------
 // Types
 // --------------------
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Suit {
     Hearts,
     Diamonds,
@@ -23,7 +33,7 @@ impl fmt::Display for Suit {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Rank {
     Number(i32),
     Jack,
@@ -66,30 +76,65 @@ pub fn rank_order(rank: Rank) -> Vec<i32> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct Card {
     pub id: String,
     pub suit: Suit,
     pub rank: Rank,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Eq)]
 pub enum MeldType {
     Rank,
     Sequence,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct Meld {
+    pub id: String,
     pub cards: Vec<Card>,
     pub meld_type: MeldType,
 }
 
+#[derive(Default)]
 pub struct Player {
     pub id: String,
     pub name: String,
     pub bot_strategy: Option<Box<dyn BotStrategy>>,
     pub score: i32,
+    pub did_join: bool,
+    pub sender: Option<UnboundedSender<Message>>,
+}
+
+impl Clone for Player {
+    fn clone(&self) -> Self {
+        Self {
+            id: self.id.clone(),
+            name: self.name.clone(),
+            bot_strategy: self.bot_strategy.clone(),
+            score: self.score,
+            did_join: self.did_join,
+            sender: None,
+        }
+    }
+}
+
+impl Serialize for Player {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeStruct;
+
+        let mut s = serializer.serialize_struct("Player", 4)?;
+
+        s.serialize_field("id", &self.id)?;
+        s.serialize_field("name", &self.name)?;
+        s.serialize_field("hasBotStrategy", &self.bot_strategy.is_some())?;
+        s.serialize_field("score", &self.score)?;
+        s.serialize_field("didJoin", &self.did_join)?;
+        s.end()
+    }
 }
 
 pub struct ActivePlayer {
@@ -100,6 +145,8 @@ pub struct ActivePlayer {
     pub hand: Vec<Card>,
     pub fire_card_id: Option<String>,
     pub melded: bool,
+    pub did_join: bool,
+    pub sender: Option<UnboundedSender<Message>>,
 }
 
 // Convert Player to ActivePlayer helper
@@ -113,6 +160,8 @@ impl ActivePlayer {
             hand,
             fire_card_id: None,
             melded: false,
+            did_join: player.did_join,
+            sender: player.sender,
         }
     }
 }
@@ -124,226 +173,346 @@ struct BotResult {
     rounds_won: i32,
 }
 
+#[derive(Serialize, Clone)]
 pub struct GameState {
+    pub id: String,
     pub players: Vec<Player>,
-    pub bots_startegies: Vec<Option<Box<dyn BotStrategy>>>,
     pub round: i32,
     pub max_rounds: i32,
 }
 
 impl GameState {
-    pub fn new(
-        players: Vec<Player>,
-        bots_startegies: Vec<Option<Box<dyn BotStrategy>>>,
-        max_rounds: i32,
-    ) -> Self {
+    pub fn new(players: Vec<Player>, max_rounds: i32) -> Self {
         Self {
+            id: Uuid::new_v4().to_string(),
             players,
-            bots_startegies,
             round: 1,
             max_rounds,
         }
     }
+}
 
-    pub fn start_game(&mut self) {
-        let mut results: Vec<BotResult> = self
+pub async fn start_game(
+    game_arc: Arc<Mutex<GameState>>,
+    state: &Arc<AppState>,
+) -> Result<(), String> {
+    // 1. SETUP: Lock briefly to get initial config (max_rounds, id) and a snapshot of players
+    // We clone these so we can DROP the lock immediately.
+    let (max_rounds, game_id, mut players_snapshot) = {
+        let game = game_arc.lock().await;
+        (game.max_rounds, game.id.clone(), game.players.clone())
+    };
+
+    // Initialize tracking results locally
+    let mut results: Vec<BotResult> = players_snapshot
+        .iter()
+        .map(|p| BotResult {
+            name: p.name.to_string(),
+            total_score: 0,
+            rounds_won: 0,
+        })
+        .collect();
+
+    println!("=== HAND GAME SIMULATION START ({}) ===", game_id);
+
+    // --- MAIN GAME LOOP ---
+    for r in 1..=max_rounds {
+        println!("\n--- ROUND {} ---", r);
+
+        // 2. INIT ROUND: Lock to generate the new round state
+        let mut round_state = {
+            let mut game = game_arc.lock().await;
+            init_round(&mut *game)
+        };
+
+        let players_data: Vec<_> = round_state
             .players
             .iter()
-            .map(|p| BotResult {
-                name: p.name.to_string(),
-                total_score: 0,
-                rounds_won: 0,
+            .map(|p| {
+                (
+                    p.id.clone(),
+                    p.hand.clone(),
+                    p.fire_card_id.clone(),
+                    p.melded,
+                )
             })
             .collect();
 
-        println!("=== HAND GAME SIMULATION START ===");
+        // Re-construct refs from snapshot (or round_state) to pass to sender
+        let player_refs: Vec<Player> = round_state
+            .players
+            .iter()
+            .map(|ap| Player {
+                id: ap.id.clone(),
+                name: ap.name.clone(),
+                bot_strategy: ap.bot_strategy.clone(),
+                score: ap.score,
+                did_join: ap.did_join,
+                sender: ap.sender.clone(),
+            })
+            .collect();
 
-        let player_names: Vec<String> = self.players.iter().map(|p| p.name.to_string()).collect();
+        match send_round_start_and_wait(
+            &game_id,
+            r,
+            players_data,
+            &player_refs,
+            state,
+            std::time::Duration::from_secs(5),
+        )
+        .await
+        {
+            Ok(()) => println!("✅ All players acknowledged round {}", r),
+            Err(e) => println!(
+                "⚠️ Failed to get all acknowledgments for round {}: {}",
+                r, e
+            ),
+        }
 
-        for r in 1..=self.max_rounds {
-            let mut round_state = init_round(self);
-            println!("\n--- ROUND {} ---", r);
-            let mut round_break = 0;
+        // --- ROUND LOGIC LOOP ---
+        while !is_round_over(&round_state) {
+            let current_player_idx = round_state.current_player;
 
-            while !is_round_over(&round_state) {
-                // print all player cards (debug)
-                if round_state.current_player == 3 {
-                    for p in &round_state.players {
-                        if p.id == "P4" {
-                            println!("Player {}:", p.id);
-                            for c in &p.hand {
-                                println!("{} {}", c.rank, c.suit);
-                            }
+            // DRAW PHASE
+            if round_state.phase == Phase::Draw {
+                let draw_choice;
+
+                let mut strategy = round_state.players[current_player_idx].bot_strategy.take();
+                if let Some(ref mut s) = strategy {
+                    draw_choice = s.decide_draw(&round_state);
+                } else {
+                    match send_player_draw_phase_and_wait(
+                        &round_state.players[current_player_idx],
+                        &game_id,
+                        r,
+                        state,
+                    )
+                    .await
+                    {
+                        Ok(choice) => draw_choice = choice.draw_choice,
+                        Err(e) => {
+                            println!("⚠️ Failed to handle draw phase finished: {}", e);
+                            draw_choice = DecideDrawResult::Deck;
                         }
                     }
-                    println!("----------------");
                 }
-
-                round_break += 1;
-                if round_break > 10000 {
-                    println!("Round timed out");
-                    break;
-                }
-
-                let current_player_idx = round_state.current_player;
-                let mut draw_choice = DecideDrawResult::Deck;
-
-                // Borrow strategy mutably
-                let mut strategy = round_state.players[current_player_idx].bot_strategy.take();
-
-                if let Some(ref mut s) = strategy {
-                    if round_state.phase == Phase::Draw {
-                        draw_choice = s.decide_draw(&round_state);
-                    }
-                }
-
                 round_state.players[current_player_idx].bot_strategy = strategy;
 
-                // DRAW PHASE
-                if round_state.phase == Phase::Draw {
-                    match draw_choice {
-                        DecideDrawResult::Fire => {
-                            if !round_state.fire_pile.is_empty() {
-                                draw_from_fire(&mut round_state);
-                            } else {
-                                draw_from_deck(&mut round_state);
-                            }
+                match draw_choice {
+                    DecideDrawResult::Fire => {
+                        if !round_state.fire_pile.is_empty() {
+                            draw_from_fire(&mut round_state);
+                        } else {
+                            draw_from_deck(&mut round_state);
                         }
-                        DecideDrawResult::Deck => draw_from_deck(&mut round_state),
                     }
-                    round_state.phase = Phase::Meld;
+                    DecideDrawResult::Deck => draw_from_deck(&mut round_state),
                 }
+                round_state.phase = Phase::Meld;
+            } else {
+                let mut strategy = round_state.players[current_player_idx].bot_strategy.take();
+                if let Some(ref mut s) = strategy {
+                    // MELD PHASE
+                    if round_state.phase == Phase::Meld {
+                        let melds = s.decide_melds(&round_state);
 
-                // MELD PHASE
-                if round_state.phase == Phase::Meld {
-                    let mut strategy = round_state.players[current_player_idx].bot_strategy.take();
-                    let mut melds = Vec::new();
-
-                    if let Some(ref mut s) = strategy {
-                        melds = s.decide_melds(&round_state);
-                    }
-                    round_state.players[current_player_idx].bot_strategy = strategy;
-
-                    if !melds.is_empty() {
-                        // lay_melds modifies round_state. Assume valid.
-                        lay_melds(&mut round_state, melds.clone());
-
-                        println!("==================");
-                        println!(
-                            "player {}: melded with cards",
-                            round_state.players[current_player_idx].id
-                        );
-                        for (i, m) in melds.iter().enumerate() {
-                            println!("Meld {}:", i + 1);
-                            for c in &m.cards {
-                                println!("{} {}", c.rank, c.suit);
+                        if !melds.is_empty() {
+                            let result = lay_melds(&mut round_state, melds.clone());
+                            if result.is_ok() {
+                                println!("==================");
+                                println!(
+                                    "Bot {}: melded with cards",
+                                    round_state.players[current_player_idx].id
+                                );
+                                for (i, m) in melds.iter().enumerate() {
+                                    println!("Meld {}:", i + 1);
+                                    for c in &m.cards {
+                                        println!("{} {}", c.rank, c.suit);
+                                    }
+                                }
+                                println!("==================");
+                                round_state.phase = Phase::PlayInMeld;
                             }
+                        } else {
+                            round_state.phase = Phase::PlayInMeld;
                         }
-                        println!("==================");
-                        round_state.phase = Phase::PlayInMeld;
-                    } else {
-                        round_state.phase = Phase::PlayInMeld;
                     }
-                }
 
-                // PLAY IN MELD PHASE
-                if round_state.phase == Phase::PlayInMeld {
-                    let mut strategy = round_state.players[current_player_idx].bot_strategy.take();
-                    let mut play_card = None;
-                    let mut play_index = -1;
+                    // PLAY IN MELD PHASE
+                    if round_state.phase == Phase::PlayInMeld {
+                        let mut play_card = None;
+                        let mut play_index = -1;
 
-                    if let Some(ref mut s) = strategy {
                         if s.can_use_features().contains(&"useMeld".to_string()) {
                             let res = s.decide_play_in_meld(&round_state);
                             play_card = res.0;
                             play_index = res.1;
                         }
+
+                        if play_card.is_none() || play_index == -1 {
+                            round_state.phase = Phase::Discard;
+                        } else {
+                            let result = play_in_meld(
+                                &mut round_state,
+                                play_card.unwrap(),
+                                play_index as usize,
+                            );
+
+                            if result.is_err() {
+                                println!("Error: {}", result.err().unwrap());
+                                round_state.phase = Phase::Discard;
+                            }
+                        }
                     }
-                    round_state.players[current_player_idx].bot_strategy = strategy;
 
-                    if play_card.is_none() || play_index == -1 {
-                        round_state.phase = Phase::Discard;
-                    } else {
-                        play_in_meld(&mut round_state, play_card.unwrap(), play_index as usize);
+                    // DISCARD PHASE
+                    if round_state.phase == Phase::Discard {
+                        let discard_idx = s.decide_discard(&round_state);
+
+                        let result = discard_card(&mut round_state, discard_idx);
+                        if result.is_err() {
+                            println!("Error: {}", result.err().unwrap());
+                        }
+                        round_state.phase = Phase::Draw;
                     }
-                }
+                } else {
+                    match send_player_playing_phase_and_wait(
+                        &round_state.players[current_player_idx],
+                        &game_id,
+                        r,
+                        state,
+                    )
+                    .await
+                    {
+                        Ok(data) => match data {
+                            PlayingPhaseData::PlayMeldPhase(data) => {
+                                round_state.phase = Phase::Meld;
+                                let melds = data.melds;
+                                if !melds.is_empty() {
+                                    let result = lay_melds(&mut round_state, melds.clone());
+                                    if result.is_ok() {
+                                        println!("==================");
+                                        println!(
+                                            "Player {}: melded with cards",
+                                            round_state.players[current_player_idx].id
+                                        );
+                                        for (i, m) in melds.iter().enumerate() {
+                                            println!("Meld {}:", i + 1);
+                                            for c in &m.cards {
+                                                println!("{} {}", c.rank, c.suit);
+                                            }
+                                        }
+                                        println!("==================");
+                                    } else {
+                                        // handle error later
+                                    }
+                                }
+                            }
+                            PlayingPhaseData::PlayInMeldPhase(data) => {
+                                round_state.phase = Phase::PlayInMeld;
 
-                // DISCARD PHASE
-                if round_state.phase == Phase::Discard {
-                    let mut strategy = round_state.players[current_player_idx].bot_strategy.take();
-                    let mut discard_idx = 0;
+                                let mut play_card = data.card;
+                                let mut play_index = round_state
+                                    .table_melds
+                                    .iter()
+                                    .position(|meld| meld.id == data.meld_id);
 
-                    if let Some(ref mut s) = strategy {
-                        discard_idx = s.decide_discard(&round_state);
-                    }
-                    round_state.players[current_player_idx].bot_strategy = strategy;
+                                if play_index.is_some() {
+                                    let result = play_in_meld(
+                                        &mut round_state,
+                                        play_card,
+                                        play_index.unwrap(),
+                                    );
+                                    if let Err(_err) = result {
+                                        // handle error later
+                                    } else {
+                                        println!("Card played successfully")
+                                    }
+                                }
+                            }
+                            PlayingPhaseData::DiscardPhase(data) => {
+                                round_state.phase = Phase::Discard;
 
-                    discard_card(&mut round_state, discard_idx);
-                    round_state.phase = Phase::Draw;
-                }
-            }
+                                let discard_idx = round_state.players[current_player_idx]
+                                    .hand
+                                    .iter()
+                                    .position(|card| card.id == data.card.id);
 
-            if round_break <= 10000 {
-                // print rounds used
-                println!("Rounds used: {}", round_break);
-                let winner = round_state
-                    .players
-                    .iter()
-                    .find(|p| p.hand.is_empty())
-                    .unwrap();
-                let winner_name = winner.name.clone();
-                let winner_id = winner.id.clone();
-                println!("Round {} winner: {}", r, winner_name);
-
-                score_round(self, &mut round_state);
-
-                // Update local results
-                for p in &self.players {
-                    if let Some(bot) = results.iter_mut().find(|b| b.name == p.name) {
-                        bot.total_score = p.score;
-                        if p.id == winner_id {
-                            bot.rounds_won += 1;
+                                if let Some(discard_idx) = discard_idx {
+                                    let result = discard_card(&mut round_state, discard_idx);
+                                    if result.is_err() {
+                                        // Handle error later
+                                    } else {
+                                        println!("Card discarded successfully");
+                                    }
+                                    round_state.phase = Phase::Draw;
+                                } else {
+                                    // handle error later
+                                }
+                            }
+                        },
+                        Err(e) => {
+                            println!("⚠️ Failed to handle draw phase finished: {}", e);
                         }
                     }
                 }
-
-                // Print summary
-                for p in &self.players {
-                    println!("{} | Score: {}", p.name, p.score);
-                }
-            } else {
-                // Restore players if round timed out
-                let mut players_back = Vec::new();
-                for rp in round_state.players.drain(..) {
-                    players_back.push(Player {
-                        id: rp.id,
-                        name: rp.name,
-                        bot_strategy: rp.bot_strategy,
-                        score: rp.score,
-                    });
-                }
-                players_back.sort_by_key(|p| p.id.clone());
-                self.players = players_back;
+                round_state.players[current_player_idx].bot_strategy = strategy;
             }
         }
 
-        println!("\n=== FINAL RESULTS ===");
-        results.sort_by(|a, b| a.total_score.cmp(&b.total_score));
+        // --- ROUND END ---
+        // Calculate winner locally
+        let winner = round_state
+            .players
+            .iter()
+            .find(|p| p.hand.is_empty())
+            .unwrap();
+        let winner_name = winner.name.clone();
+        let winner_id = winner.id.clone();
+        println!("Round {} winner: {}", r, winner_name);
 
-        for (i, r) in results.iter().enumerate() {
-            println!(
-                "{}. {} | Total Score: {} | Rounds Won: {}",
-                i + 1,
-                r.name,
-                r.total_score,
-                r.rounds_won
-            );
-        }
+        // 4. SCORE UPDATE: Lock Global State
+        {
+            let mut game = game_arc.lock().await;
 
-        if !results.is_empty() {
-            println!("\n🏆 WINNER: {}", results[0].name);
+            // Pass mutable reference to the locked game
+            score_round(&mut *game, &mut round_state);
+
+            // Update results based on the now-updated game state
+            for p in &game.players {
+                if let Some(bot) = results.iter_mut().find(|b| b.name == p.name) {
+                    bot.total_score = p.score;
+                    if p.id == winner_id {
+                        bot.rounds_won += 1;
+                    }
+                }
+                println!("{} | Score: {}", p.name, p.score);
+            }
+
+            // Update our snapshot for the next round
+            players_snapshot = game.players.clone();
         }
     }
+
+    // --- FINAL RESULTS ---
+    println!("\n=== FINAL RESULTS ===");
+    results.sort_by(|a, b| a.total_score.cmp(&b.total_score));
+
+    for (i, r) in results.iter().enumerate() {
+        println!(
+            "{}. {} | Total: {} | Wins: {}",
+            i + 1,
+            r.name,
+            r.total_score,
+            r.rounds_won
+        );
+    }
+
+    if !results.is_empty() {
+        println!("\n🏆 WINNER: {}", results[0].name);
+    }
+
+    Ok(())
 }
 
 pub struct RoundState {
@@ -556,11 +725,13 @@ pub fn check_melds(state: &mut RoundState) {
                 for i in (0..meld.cards.len()).step_by(3) {
                     if i + 3 <= meld.cards.len() && i + 6 <= meld.cards.len() {
                         added_melds.push(Meld {
+                            id: Uuid::new_v4().to_string(),
                             cards: meld.cards[i..i + 3].to_vec(),
                             meld_type: MeldType::Sequence,
                         });
                     } else {
                         added_melds.push(Meld {
+                            id: Uuid::new_v4().to_string(),
                             cards: meld.cards[i..].to_vec(),
                             meld_type: MeldType::Sequence,
                         });
@@ -802,9 +973,10 @@ pub fn discard_fire_card(state: &mut RoundState) {
     }
 }
 
-pub fn lay_melds(state: &mut RoundState, melds: Vec<Meld>) {
+pub fn lay_melds(state: &mut RoundState, melds: Vec<Meld>) -> Result<(), String> {
     if melds.is_empty() {
-        panic!("No melds to lay");
+        // panic!("No melds to lay");
+        return Err("No melds to lay".to_string());
     }
     if !melds.iter().all(|m| is_valid_set(m)) {
         // print all melds
@@ -815,7 +987,8 @@ pub fn lay_melds(state: &mut RoundState, melds: Vec<Meld>) {
             }
             println!("==========================");
         }
-        panic!("Invalid meld");
+        // panic!("Invalid meld");
+        return Err("Invalid meld".to_string());
     }
 
     let player_idx = state.current_player;
@@ -825,7 +998,8 @@ pub fn lay_melds(state: &mut RoundState, melds: Vec<Meld>) {
         if !player.melded {
             let score = melds_value(&melds);
             if score < 51 {
-                panic!("Total meld score must be >= 51");
+                // panic!("Total meld score must be >= 51");
+                return Err("Total meld score must be >= 51".to_string());
             }
         }
 
@@ -843,7 +1017,7 @@ pub fn lay_melds(state: &mut RoundState, melds: Vec<Meld>) {
                     }
                     println!("==========================");
                 }
-                panic!("Fire card not used in meld");
+                return Err("Fire card not used in meld".to_string());
             }
         }
     }
@@ -855,7 +1029,8 @@ pub fn lay_melds(state: &mut RoundState, melds: Vec<Meld>) {
             if let Some(idx) = player.hand.iter().position(|h| h.id == c.id) {
                 player.hand.remove(idx);
             } else {
-                panic!("Card not in hand");
+                // panic!("Card not in hand");
+                return Err("Card not in hand".to_string());
             }
         }
     }
@@ -863,24 +1038,28 @@ pub fn lay_melds(state: &mut RoundState, melds: Vec<Meld>) {
 
     state.table_melds.extend(melds);
     check_melds(state);
+    Ok(())
 }
 
-pub fn play_in_meld(state: &mut RoundState, card: Card, meld_index: usize) {
+pub fn play_in_meld(state: &mut RoundState, card: Card, meld_index: usize) -> Result<(), String> {
     let player_idx = state.current_player;
 
     // Checks
     if meld_index >= state.table_melds.len() {
-        panic!("Meld not found");
+        // panic!("Meld not found");
+        return Err("Meld not found".to_string());
     }
     let meld_type = state.table_melds[meld_index].meld_type.clone();
 
     {
         let player = &state.players[player_idx];
         if !player.hand.iter().any(|c| c.id == card.id) {
-            panic!("Card not in hand");
+            // panic!("Card not in hand");
+            return Err("Card not in hand".to_string());
         }
         if player.hand.len() == 1 {
-            panic!("Cannot play last card in hand");
+            // panic!("Cannot play last card in hand");
+            return Err("Cannot play last card in hand".to_string());
         }
     }
 
@@ -889,7 +1068,7 @@ pub fn play_in_meld(state: &mut RoundState, card: Card, meld_index: usize) {
         let meld = &state.table_melds[meld_index];
         let (success, take_joker) = can_play_in_rank_meld(meld, &card);
         if !success {
-            return;
+            return Err("Cannot play card in rank meld".to_string());
         }
 
         let mut joker_to_return: Option<Card> = None;
@@ -909,6 +1088,12 @@ pub fn play_in_meld(state: &mut RoundState, card: Card, meld_index: usize) {
         let player = &mut state.players[player_idx];
         if let Some(joker) = joker_to_return {
             player.hand.push(joker);
+        }
+
+        if let Some(fire_card_id) = &player.fire_card_id {
+            if *fire_card_id == card.id {
+                player.fire_card_id = None;
+            }
         }
         let idx = player.hand.iter().position(|c| c.id == card.id).unwrap();
         player.hand.remove(idx);
@@ -918,7 +1103,7 @@ pub fn play_in_meld(state: &mut RoundState, card: Card, meld_index: usize) {
         let meld = &state.table_melds[meld_index];
         let (success, take_joker) = can_play_in_sequence_meld(meld, &card, false);
         if !success {
-            return;
+            return Err("Cannot play card in sequence meld".to_string());
         }
 
         let mut joker_to_return: Option<Card> = None;
@@ -939,23 +1124,34 @@ pub fn play_in_meld(state: &mut RoundState, card: Card, meld_index: usize) {
         if let Some(joker) = joker_to_return {
             player.hand.push(joker);
         }
+
+        if let Some(fire_card_id) = &player.fire_card_id {
+            if *fire_card_id == card.id {
+                player.fire_card_id = None;
+            }
+        }
         let idx = player.hand.iter().position(|c| c.id == card.id).unwrap();
         player.hand.remove(idx);
     }
 
     check_melds(state);
+    Ok(())
 }
 
-pub fn discard_card(state: &mut RoundState, card_index: usize) {
+pub fn discard_card(state: &mut RoundState, card_index: usize) -> Result<(), String> {
     if state.phase != Phase::Discard {
-        panic!("Not discard phase");
+        return Err("Not discard phase".to_string());
     }
 
     let player = &mut state.players[state.current_player];
+    if player.fire_card_id.is_some() {
+        return Err("Player has a fire card".to_string());
+    }
     let card = player.hand.remove(card_index);
     state.fire_pile.push(card);
 
     state.current_player = (state.current_player + 1) % state.players.len();
+    Ok(())
 }
 
 // --------------------
@@ -998,6 +1194,8 @@ pub fn score_round(game_state: &mut GameState, round_state: &mut RoundState) {
             name: rp.name,
             bot_strategy: rp.bot_strategy, // Move the strategy back
             score: rp.score,               // Use the updated score from the ActivePlayer
+            did_join: rp.did_join,
+            sender: rp.sender,
         });
     }
 

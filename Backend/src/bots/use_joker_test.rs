@@ -23,6 +23,8 @@ mod tests {
             hand,
             fire_card_id: None,
             melded: false,
+            did_join: true,
+            sender: None,
         }
     }
 

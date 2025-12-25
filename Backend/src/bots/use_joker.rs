@@ -1,3 +1,5 @@
+use uuid::Uuid;
+
 use crate::bot::{group_by_rank, group_by_suit, BotStrategy, DecideDrawResult};
 use crate::logic::{
     can_play_in_rank_meld, can_play_in_sequence_meld, melds_value, rank_order, rank_value_int,
@@ -16,6 +18,7 @@ macro_rules! update_max_and_next {
     };
 }
 
+#[derive(Clone, Debug)]
 pub struct UseJokerBot {
     pub name: String,
     pub features: Vec<String>,
@@ -623,6 +626,7 @@ impl UseJokerBot {
             all_melds.extend(valid_meld_seqs.into_iter().map(|cards| {
                 let owned_cards: Vec<Card> = cards.into_iter().map(|c| (*c).clone()).collect();
                 Meld {
+                    id: Uuid::new_v4().to_string(),
                     cards: owned_cards,
                     meld_type: MeldType::Sequence,
                 }
@@ -672,6 +676,7 @@ impl UseJokerBot {
                         let mut m_cards = group.clone();
                         m_cards.push(j);
                         melds.push(Meld {
+                            id: Uuid::new_v4().to_string(),
                             cards: m_cards,
                             meld_type: MeldType::Rank,
                         });
@@ -680,6 +685,7 @@ impl UseJokerBot {
                 3 => {
                     if distinct_suits == 3 {
                         melds.push(Meld {
+                            id: Uuid::new_v4().to_string(),
                             cards: group.clone(),
                             meld_type: MeldType::Rank,
                         });
@@ -689,6 +695,7 @@ impl UseJokerBot {
                 4 => {
                     if distinct_suits == 4 {
                         melds.push(Meld {
+                            id: Uuid::new_v4().to_string(),
                             cards: group.clone(),
                             meld_type: MeldType::Rank,
                         });
@@ -723,10 +730,12 @@ impl UseJokerBot {
                             pair2.push(j2);
 
                             melds.push(Meld {
+                                id: Uuid::new_v4().to_string(),
                                 cards: pair1,
                                 meld_type: MeldType::Rank,
                             });
                             melds.push(Meld {
+                                id: Uuid::new_v4().to_string(),
                                 cards: pair2,
                                 meld_type: MeldType::Rank,
                             });
@@ -762,12 +771,14 @@ impl UseJokerBot {
                             m2.push(j);
 
                             melds.push(Meld {
+                                id: Uuid::new_v4().to_string(),
                                 cards: m1,
                                 meld_type: MeldType::Rank,
                             });
                             extension_candidates.push((rank_val, melds.len() - 1));
 
                             melds.push(Meld {
+                                id: Uuid::new_v4().to_string(),
                                 cards: m2,
                                 meld_type: MeldType::Rank,
                             });
@@ -797,12 +808,14 @@ impl UseJokerBot {
                             }
                         }
                         melds.push(Meld {
+                            id: Uuid::new_v4().to_string(),
                             cards: m1,
                             meld_type: MeldType::Rank,
                         });
                         extension_candidates.push((rank_val, melds.len() - 1));
 
                         melds.push(Meld {
+                            id: Uuid::new_v4().to_string(),
                             cards: m2,
                             meld_type: MeldType::Rank,
                         });
@@ -831,10 +844,12 @@ impl UseJokerBot {
                         }
                     }
                     melds.push(Meld {
+                        id: Uuid::new_v4().to_string(),
                         cards: m1,
                         meld_type: MeldType::Rank,
                     });
                     melds.push(Meld {
+                        id: Uuid::new_v4().to_string(),
                         cards: m2,
                         meld_type: MeldType::Rank,
                     });
@@ -862,10 +877,12 @@ impl UseJokerBot {
                         }
                     }
                     melds.push(Meld {
+                        id: Uuid::new_v4().to_string(),
                         cards: m1,
                         meld_type: MeldType::Rank,
                     });
                     melds.push(Meld {
+                        id: Uuid::new_v4().to_string(),
                         cards: m2,
                         meld_type: MeldType::Rank,
                     });
@@ -1253,6 +1270,7 @@ impl UseJokerBot {
             }
 
             all_melds.extend(valid_meld_seqs.into_iter().map(|m| Meld {
+                id: Uuid::new_v4().to_string(),
                 cards: m,
                 meld_type: MeldType::Sequence,
             }));
@@ -1349,6 +1367,11 @@ impl BotStrategy for UseJokerBot {
     fn name(&self) -> &str {
         &self.name
     }
+
+    fn clone_box(&self) -> Box<dyn BotStrategy> {
+        Box::new(self.clone())
+    }
+
     fn can_use_features(&self) -> &[String] {
         &self.features
     }

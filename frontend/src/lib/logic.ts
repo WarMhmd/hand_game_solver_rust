@@ -39,6 +39,8 @@ export interface Player {
   id: string;
   name: string;
   score: number;
+  hasBotStrategy: boolean;
+  didJoin: boolean;
 }
 
 export interface ActivePlayer extends Player {
@@ -59,51 +61,8 @@ export interface RoundState {
   deck: Card[];
   firePile: Card[];
   tableMelds: Meld[];
-  phase: "draw" | "meld" | "playInMeld" | "discard";
+  phase: "draw" | "playing";
 }
-
-// --------------------
-// Deck creation (2 decks + 2 jokers = 106 cards)
-// --------------------
-
-export function createDeck(): Card[] {
-  const suits: Suit[] = ["Hearts", "Diamonds", "Clubs", "Spades"];
-  const ranks: Rank[] = [2, 3, 4, 5, 6, 7, 8, 9, 10, "J", "Q", "K", "A"];
-
-  const deck: Card[] = [];
-
-  for (let d = 0; d < 2; d++) {
-    for (const suit of suits) {
-      for (const rank of ranks) {
-        deck.push({
-          id: `${suit}-${rank}-${d}`,
-          suit,
-          rank,
-        });
-      }
-    }
-    deck.push({
-      id: `Joker-${d}`,
-      suit: "Joker",
-      rank: "Joker",
-    });
-  }
-
-  return deck;
-}
-
-export function shuffle(deck: Card[]): Card[] {
-  const d = [...deck];
-  for (let i = d.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [d[i], d[j]] = [d[j], d[i]];
-  }
-  return d;
-}
-
-// --------------------
-// Game setup
-// --------------------
 
 // --------------------
 // Helpers
@@ -339,32 +298,6 @@ export function isValidSet(meld: Meld): boolean {
 // Turn actions
 // --------------------
 
-export function drawFromDeck(state: RoundState): RoundState {
-  if (state.phase !== "draw") throw new Error("Not draw phase");
-  let card = state.deck.shift();
-  if (!card) {
-    // put Fire
-    state.deck = shuffle(state.firePile);
-    state.firePile = [];
-    // draw from deck again
-    card = state.deck.shift();
-  }
-  if (!card) throw new Error("Deck empty");
-
-  state.players[state.currentPlayer].hand.push(card);
-  return state;
-}
-
-export function drawFromFire(state: RoundState): RoundState {
-  if (state.phase !== "draw") throw new Error("Not draw phase");
-  const card = state.firePile.pop();
-  if (!card) throw new Error("Fire pile empty");
-
-  state.players[state.currentPlayer].hand.push(card);
-  state.players[state.currentPlayer].FireCardId = card.id;
-  return state;
-}
-
 export function discardFireCard(state: RoundState) {
   const player = state.players[state.currentPlayer];
   if (!player.FireCardId) throw new Error("No fire card to discard");
@@ -468,7 +401,7 @@ export function PlayInMeld(state: RoundState, card: Card, meldIndex: number) {
 }
 
 export function discardCard(state: RoundState, cardIndex: number): RoundState {
-  if (state.phase !== "discard") throw new Error("Not discard phase");
+  if (state.phase !== "playing") throw new Error("Not discard phase");
 
   const player = state.players[state.currentPlayer];
   const card = player.hand.splice(cardIndex, 1)[0];

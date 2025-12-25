@@ -29,6 +29,7 @@ mod tests {
         let mut state = create_test_round_state();
 
         let meld = Meld {
+            id: Uuid::new_v4().to_string(),
             cards: vec![
                 create_card("1", Suit::Hearts, Rank::Number(5)),
                 create_card("2", Suit::Diamonds, Rank::Number(5)),
@@ -55,6 +56,7 @@ mod tests {
         let mut state = create_test_round_state();
 
         let meld = Meld {
+            id: Uuid::new_v4().to_string(),
             cards: vec![
                 create_card("1", Suit::Hearts, Rank::Number(7)),
                 create_card("2", Suit::Diamonds, Rank::Number(7)),
@@ -78,6 +80,7 @@ mod tests {
         let mut state = create_test_round_state();
 
         let meld = Meld {
+            id: Uuid::new_v4().to_string(),
             cards: vec![
                 create_card("1", Suit::Hearts, Rank::Number(9)),
                 create_card("2", Suit::Diamonds, Rank::Number(9)),
@@ -102,6 +105,7 @@ mod tests {
         let mut state = create_test_round_state();
 
         let meld = Meld {
+            id: Uuid::new_v4().to_string(),
             cards: vec![
                 create_card("1", Suit::Hearts, Rank::Number(2)),
                 create_card("2", Suit::Hearts, Rank::Number(3)),
@@ -139,6 +143,7 @@ mod tests {
         let mut state = create_test_round_state();
 
         let meld = Meld {
+            id: Uuid::new_v4().to_string(),
             cards: vec![
                 create_card("1", Suit::Clubs, Rank::Number(2)),
                 create_card("2", Suit::Clubs, Rank::Number(3)),
@@ -170,6 +175,7 @@ mod tests {
         let mut state = create_test_round_state();
 
         let meld = Meld {
+            id: Uuid::new_v4().to_string(),
             cards: vec![
                 create_card("1", Suit::Diamonds, Rank::Number(3)),
                 create_card("2", Suit::Diamonds, Rank::Number(4)),
@@ -198,6 +204,7 @@ mod tests {
         let mut state = create_test_round_state();
 
         let meld = Meld {
+            id: Uuid::new_v4().to_string(),
             cards: vec![
                 create_card("1", Suit::Spades, Rank::Number(4)),
                 create_card("2", Suit::Spades, Rank::Number(5)),
@@ -224,6 +231,7 @@ mod tests {
 
         // 4-card rank meld (should be removed to fire pile)
         let rank_meld = Meld {
+            id: Uuid::new_v4().to_string(),
             cards: vec![
                 create_card("1", Suit::Hearts, Rank::Queen),
                 create_card("2", Suit::Diamonds, Rank::Queen),
@@ -235,6 +243,7 @@ mod tests {
 
         // 6-card sequence meld (should be split)
         let seq_meld = Meld {
+            id: Uuid::new_v4().to_string(),
             cards: vec![
                 create_card("5", Suit::Hearts, Rank::Number(5)),
                 create_card("6", Suit::Hearts, Rank::Number(6)),
@@ -248,6 +257,7 @@ mod tests {
 
         // 3-card rank meld (should stay)
         let small_rank_meld = Meld {
+            id: Uuid::new_v4().to_string(),
             cards: vec![
                 create_card("11", Suit::Hearts, Rank::King),
                 create_card("12", Suit::Diamonds, Rank::King),
@@ -294,6 +304,7 @@ mod tests {
 
         // Add a 4-card rank meld
         let meld = Meld {
+            id: Uuid::new_v4().to_string(),
             cards: vec![
                 create_card("1", Suit::Hearts, Rank::Jack),
                 create_card("2", Suit::Diamonds, Rank::Jack),
@@ -321,6 +332,7 @@ mod tests {
         let mut state = create_test_round_state();
 
         let meld = Meld {
+            id: Uuid::new_v4().to_string(),
             cards: vec![
                 create_card("1", Suit::Clubs, Rank::Jack),
                 create_card("2", Suit::Clubs, Rank::Queen),
@@ -354,6 +366,7 @@ mod tests {
         // Create a 4-card "meld" with same suit (invalid for rank meld in game rules)
         // but check_melds will still process it if valid_rank_meld returns false
         let meld = Meld {
+            id: Uuid::new_v4().to_string(),
             cards: vec![
                 create_card("1", Suit::Hearts, Rank::Number(3)),
                 create_card("2", Suit::Hearts, Rank::Number(3)),
@@ -380,6 +393,7 @@ mod tests {
     fn test_can_play_in_rank_meld_add_fourth_card() {
         // Test adding a fourth card to a 3-card rank meld
         let meld = Meld {
+            id: Uuid::new_v4().to_string(),
             cards: vec![
                 create_card("1", Suit::Hearts, Rank::Number(8)),
                 create_card("2", Suit::Diamonds, Rank::Number(8)),
@@ -399,6 +413,7 @@ mod tests {
     fn test_can_play_in_rank_meld_cannot_add_fifth_card() {
         // Test that we cannot add a fifth card to a 4-card rank meld
         let meld = Meld {
+            id: Uuid::new_v4().to_string(),
             cards: vec![
                 create_card("1", Suit::Hearts, Rank::Queen),
                 create_card("2", Suit::Diamonds, Rank::Queen),
@@ -419,6 +434,7 @@ mod tests {
     fn test_can_play_in_rank_meld_wrong_rank() {
         // Test that we cannot add a card with different rank
         let meld = Meld {
+            id: Uuid::new_v4().to_string(),
             cards: vec![
                 create_card("1", Suit::Hearts, Rank::Number(5)),
                 create_card("2", Suit::Diamonds, Rank::Number(5)),
@@ -438,6 +454,7 @@ mod tests {
     fn test_can_play_in_rank_meld_duplicate_suit() {
         // Test that we cannot add a card with duplicate suit
         let meld = Meld {
+            id: Uuid::new_v4().to_string(),
             cards: vec![
                 create_card("1", Suit::Hearts, Rank::King),
                 create_card("2", Suit::Diamonds, Rank::King),
@@ -457,6 +474,7 @@ mod tests {
     fn test_can_play_in_rank_meld_replace_joker() {
         // Test replacing a joker in a 4-card rank meld
         let meld = Meld {
+            id: Uuid::new_v4().to_string(),
             cards: vec![
                 create_card("1", Suit::Hearts, Rank::Number(7)),
                 create_card("2", Suit::Diamonds, Rank::Number(7)),
@@ -477,6 +495,7 @@ mod tests {
     fn test_can_play_in_rank_meld_cannot_add_second_joker() {
         // Test that we cannot add a second joker to a meld with joker
         let meld = Meld {
+            id: Uuid::new_v4().to_string(),
             cards: vec![
                 create_card("1", Suit::Hearts, Rank::Number(9)),
                 create_card("2", Suit::Diamonds, Rank::Number(9)),
@@ -496,6 +515,7 @@ mod tests {
     fn test_can_play_in_rank_meld_joker_in_three_card_meld() {
         // Test adding a joker to a 3-card rank meld
         let meld = Meld {
+            id: Uuid::new_v4().to_string(),
             cards: vec![
                 create_card("1", Suit::Hearts, Rank::Ace),
                 create_card("2", Suit::Diamonds, Rank::Ace),
@@ -519,6 +539,7 @@ mod tests {
     fn test_can_play_in_sequence_meld_add_to_beginning() {
         // Test adding a card to the beginning of a sequence
         let meld = Meld {
+            id: Uuid::new_v4().to_string(),
             cards: vec![
                 create_card("1", Suit::Hearts, Rank::Number(5)),
                 create_card("2", Suit::Hearts, Rank::Number(6)),
@@ -538,6 +559,7 @@ mod tests {
     fn test_can_play_in_sequence_meld_add_to_end() {
         // Test adding a card to the end of a sequence
         let meld = Meld {
+            id: Uuid::new_v4().to_string(),
             cards: vec![
                 create_card("1", Suit::Diamonds, Rank::Number(3)),
                 create_card("2", Suit::Diamonds, Rank::Number(4)),
@@ -557,6 +579,7 @@ mod tests {
     fn test_can_play_in_sequence_meld_wrong_suit() {
         // Test that we cannot add a card with different suit
         let meld = Meld {
+            id: Uuid::new_v4().to_string(),
             cards: vec![
                 create_card("1", Suit::Clubs, Rank::Number(8)),
                 create_card("2", Suit::Clubs, Rank::Number(9)),
@@ -576,6 +599,7 @@ mod tests {
     fn test_can_play_in_sequence_meld_wrong_rank() {
         // Test that we cannot add a card that doesn't continue the sequence
         let meld = Meld {
+            id: Uuid::new_v4().to_string(),
             cards: vec![
                 create_card("1", Suit::Spades, Rank::Number(4)),
                 create_card("2", Suit::Spades, Rank::Number(5)),
@@ -595,6 +619,7 @@ mod tests {
     fn test_can_play_in_sequence_meld_replace_joker() {
         // Test replacing a joker in a sequence
         let meld = Meld {
+            id: Uuid::new_v4().to_string(),
             cards: vec![
                 create_card("1", Suit::Hearts, Rank::Number(2)),
                 create_card("joker", Suit::Joker, Rank::Joker),
@@ -614,6 +639,7 @@ mod tests {
     fn test_can_play_in_sequence_meld_cannot_add_second_joker() {
         // Test that we cannot add a second joker to a sequence with joker
         let meld = Meld {
+            id: Uuid::new_v4().to_string(),
             cards: vec![
                 create_card("1", Suit::Diamonds, Rank::Number(7)),
                 create_card("joker1", Suit::Joker, Rank::Joker),
@@ -633,6 +659,7 @@ mod tests {
     fn test_can_play_in_sequence_meld_joker_at_beginning() {
         // Test adding a joker at the beginning of a sequence
         let meld = Meld {
+            id: Uuid::new_v4().to_string(),
             cards: vec![
                 create_card("1", Suit::Clubs, Rank::Number(5)),
                 create_card("2", Suit::Clubs, Rank::Number(6)),
@@ -652,6 +679,7 @@ mod tests {
     fn test_can_play_in_sequence_meld_joker_at_end() {
         // Test adding a joker at the end of a sequence
         let meld = Meld {
+            id: Uuid::new_v4().to_string(),
             cards: vec![
                 create_card("1", Suit::Spades, Rank::Number(8)),
                 create_card("2", Suit::Spades, Rank::Number(9)),
@@ -671,6 +699,7 @@ mod tests {
     fn test_can_play_in_sequence_meld_with_face_cards() {
         // Test adding to a sequence with face cards
         let meld = Meld {
+            id: Uuid::new_v4().to_string(),
             cards: vec![
                 create_card("1", Suit::Hearts, Rank::Jack),
                 create_card("2", Suit::Hearts, Rank::Queen),
@@ -692,6 +721,7 @@ mod tests {
 
     fn create_test_player(id: &str, hand: Vec<Card>) -> ActivePlayer {
         ActivePlayer {
+            sender: None,
             id: id.to_string(),
             name: format!("Player {}", id),
             bot_strategy: None,
@@ -699,6 +729,7 @@ mod tests {
             hand,
             fire_card_id: None,
             melded: false,
+            did_join: true,
         }
     }
 
@@ -708,6 +739,7 @@ mod tests {
         let mut state = create_test_round_state();
 
         let meld = Meld {
+            id: Uuid::new_v4().to_string(),
             cards: vec![
                 create_card("m1", Suit::Hearts, Rank::Number(6)),
                 create_card("m2", Suit::Diamonds, Rank::Number(6)),
@@ -740,6 +772,7 @@ mod tests {
         let mut state = create_test_round_state();
 
         let meld = Meld {
+            id: Uuid::new_v4().to_string(),
             cards: vec![
                 create_card("m1", Suit::Hearts, Rank::Queen),
                 create_card("m2", Suit::Diamonds, Rank::Queen),
@@ -773,6 +806,7 @@ mod tests {
         let mut state = create_test_round_state();
 
         let meld = Meld {
+            id: Uuid::new_v4().to_string(),
             cards: vec![
                 create_card("m1", Suit::Hearts, Rank::Number(4)),
                 create_card("m2", Suit::Hearts, Rank::Number(5)),
@@ -803,6 +837,7 @@ mod tests {
         let mut state = create_test_round_state();
 
         let meld = Meld {
+            id: Uuid::new_v4().to_string(),
             cards: vec![
                 create_card("m1", Suit::Clubs, Rank::Number(8)),
                 create_card("joker", Suit::Joker, Rank::Joker),
@@ -860,6 +895,7 @@ mod tests {
         let mut state = create_test_round_state();
 
         let meld = Meld {
+            id: Uuid::new_v4().to_string(),
             cards: vec![
                 create_card("m1", Suit::Hearts, Rank::King),
                 create_card("m2", Suit::Diamonds, Rank::King),
@@ -883,6 +919,7 @@ mod tests {
         let mut state = create_test_round_state();
 
         let meld = Meld {
+            id: Uuid::new_v4().to_string(),
             cards: vec![
                 create_card("m1", Suit::Hearts, Rank::Jack),
                 create_card("m2", Suit::Diamonds, Rank::Jack),
@@ -905,6 +942,7 @@ mod tests {
         let mut state = create_test_round_state();
 
         let meld = Meld {
+            id: Uuid::new_v4().to_string(),
             cards: vec![
                 create_card("m1", Suit::Diamonds, Rank::Number(2)),
                 create_card("m2", Suit::Diamonds, Rank::Number(3)),
@@ -937,6 +975,7 @@ mod tests {
         let mut state = create_test_round_state();
 
         let meld = Meld {
+            id: Uuid::new_v4().to_string(),
             cards: vec![
                 create_card("m1", Suit::Hearts, Rank::Number(10)),
                 create_card("m2", Suit::Diamonds, Rank::Number(10)),
@@ -966,6 +1005,7 @@ mod tests {
         let mut state = create_test_round_state();
 
         let meld = Meld {
+            id: Uuid::new_v4().to_string(),
             cards: vec![
                 create_card("m1", Suit::Hearts, Rank::Number(7)),
                 create_card("m2", Suit::Diamonds, Rank::Number(7)),
@@ -999,6 +1039,7 @@ mod tests {
         let mut state = create_test_round_state();
 
         let meld1 = Meld {
+            id: Uuid::new_v4().to_string(),
             cards: vec![
                 create_card("p1", Suit::Hearts, Rank::King),   // 10
                 create_card("p2", Suit::Diamonds, Rank::King), // 10
@@ -1008,6 +1049,7 @@ mod tests {
         };
 
         let meld2 = Meld {
+            id: Uuid::new_v4().to_string(),
             cards: vec![
                 create_card("p4", Suit::Spades, Rank::Queen),   // 10
                 create_card("p5", Suit::Hearts, Rank::Queen),   // 10
@@ -1049,6 +1091,7 @@ mod tests {
         let mut state = create_test_round_state();
 
         let meld = Meld {
+            id: Uuid::new_v4().to_string(),
             cards: vec![
                 create_card("p1", Suit::Hearts, Rank::Number(3)), // 3
                 create_card("p2", Suit::Diamonds, Rank::Number(3)), // 3
@@ -1078,6 +1121,7 @@ mod tests {
         let mut state = create_test_round_state();
 
         let meld = Meld {
+            id: Uuid::new_v4().to_string(),
             cards: vec![
                 create_card("p1", Suit::Hearts, Rank::Number(4)),
                 create_card("p2", Suit::Diamonds, Rank::Number(4)),
@@ -1113,6 +1157,7 @@ mod tests {
         let fire_card = create_card("fire", Suit::Hearts, Rank::King);
 
         let meld1 = Meld {
+            id: Uuid::new_v4().to_string(),
             cards: vec![
                 fire_card.clone(),
                 create_card("p2", Suit::Diamonds, Rank::King),
@@ -1122,6 +1167,7 @@ mod tests {
         };
 
         let meld2 = Meld {
+            id: Uuid::new_v4().to_string(),
             cards: vec![
                 create_card("p4", Suit::Spades, Rank::Queen),
                 create_card("p5", Suit::Hearts, Rank::Queen),
@@ -1159,6 +1205,7 @@ mod tests {
         let mut state = create_test_round_state();
 
         let meld1 = Meld {
+            id: Uuid::new_v4().to_string(),
             cards: vec![
                 create_card("p1", Suit::Hearts, Rank::King),
                 create_card("p2", Suit::Diamonds, Rank::King),
@@ -1169,6 +1216,7 @@ mod tests {
         };
 
         let meld2 = Meld {
+            id: Uuid::new_v4().to_string(),
             cards: vec![
                 create_card("p5", Suit::Hearts, Rank::Ace),
                 create_card("p6", Suit::Diamonds, Rank::Ace),
@@ -1205,6 +1253,7 @@ mod tests {
         let mut state = create_test_round_state();
 
         let meld = Meld {
+            id: Uuid::new_v4().to_string(),
             cards: vec![
                 create_card("p1", Suit::Hearts, Rank::King),
                 create_card("p2", Suit::Diamonds, Rank::King),
@@ -1236,6 +1285,7 @@ mod tests {
         let mut state = create_test_round_state();
 
         let meld = Meld {
+            id: Uuid::new_v4().to_string(),
             cards: vec![
                 create_card("p1", Suit::Hearts, Rank::King),
                 create_card("p2", Suit::Hearts, Rank::King), // Same suit - invalid
@@ -1278,6 +1328,7 @@ mod tests {
         let mut state = create_test_round_state();
 
         let meld1 = Meld {
+            id: Uuid::new_v4().to_string(),
             cards: vec![
                 create_card("p1", Suit::Hearts, Rank::Number(5)),
                 create_card("p2", Suit::Hearts, Rank::Number(6)),
@@ -1290,6 +1341,7 @@ mod tests {
         };
 
         let meld2 = Meld {
+            id: Uuid::new_v4().to_string(),
             cards: vec![
                 create_card("p7", Suit::Diamonds, Rank::Jack),
                 create_card("p8", Suit::Diamonds, Rank::Queen),
@@ -1329,6 +1381,7 @@ mod tests {
         let mut state = create_test_round_state();
 
         let meld1 = Meld {
+            id: Uuid::new_v4().to_string(),
             cards: vec![
                 create_card("p1", Suit::Hearts, Rank::King),
                 create_card("p2", Suit::Diamonds, Rank::King),
@@ -1338,6 +1391,7 @@ mod tests {
         };
 
         let meld2 = Meld {
+            id: Uuid::new_v4().to_string(),
             cards: vec![
                 create_card("p3", Suit::Spades, Rank::Queen),
                 create_card("p4", Suit::Hearts, Rank::Queen),
@@ -1373,6 +1427,7 @@ mod tests {
         let mut state = create_test_round_state();
 
         let rank_meld = Meld {
+            id: Uuid::new_v4().to_string(),
             cards: vec![
                 create_card("p1", Suit::Hearts, Rank::Ace),   // 11
                 create_card("p2", Suit::Diamonds, Rank::Ace), // 11
@@ -1382,6 +1437,7 @@ mod tests {
         };
 
         let seq_meld = Meld {
+            id: Uuid::new_v4().to_string(),
             cards: vec![
                 create_card("p4", Suit::Spades, Rank::Jack),  // 10
                 create_card("p5", Suit::Spades, Rank::Queen), // 10
@@ -1419,6 +1475,7 @@ mod tests {
         let mut state = create_test_round_state();
 
         let meld1 = Meld {
+            id: Uuid::new_v4().to_string(),
             cards: vec![
                 create_card("p1", Suit::Hearts, Rank::Number(10)),
                 create_card("p2", Suit::Diamonds, Rank::Number(10)),
@@ -1429,6 +1486,7 @@ mod tests {
         };
 
         let meld2 = Meld {
+            id: Uuid::new_v4().to_string(),
             cards: vec![
                 create_card("p5", Suit::Hearts, Rank::King),
                 create_card("p6", Suit::Diamonds, Rank::King),

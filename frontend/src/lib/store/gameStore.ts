@@ -1,10 +1,11 @@
 import { create } from "zustand";
-import type { GameState } from "../logic";
+import type { GameState, Player } from "../logic";
 
 type Page = "menu" | "game" | "results";
 
 type GameStore = {
   page: Page;
+  player: Player | null;
   gameState: GameState | null;
 
   // actions
@@ -17,13 +18,14 @@ type GameStore = {
 export const useGameStore = create<GameStore>((set) => ({
   page: "menu",
   gameState: null,
-
+  player: null,
   goTo: (page) => set({ page }),
 
   startGame: (gameState) =>
     set({
       page: "game",
       gameState,
+      player: gameState.players[0],
     }),
 
   updateGame: (gameState) => set({ gameState }),

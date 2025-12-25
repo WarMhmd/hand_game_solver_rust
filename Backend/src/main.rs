@@ -1,5 +1,9 @@
 mod bot;
 mod logic;
+mod websocket;
+mod apis {
+    pub mod game;
+}
 mod bots {
     pub mod play_in_melds;
     pub mod play_with_sequence;
@@ -7,43 +11,55 @@ mod bots {
     pub mod use_joker;
 }
 
-use crate::bot::{BotStrategy, RankBot};
-use crate::bots::play_in_melds::UseMeldBot;
-use crate::bots::use_fire::UseFireBot;
-use crate::bots::use_joker::UseJokerBot;
+use crate::logic::GameState;
+use crate::websocket::handler::PlayingPhaseData;
+use crate::websocket::websocket_handler;
+use crate::{apis::game::init_game, websocket::handler::DrawPhaseData};
 
-use axum::{routing::get, Json, Router};
-use serde::Serialize;
+use axum::{
+    routing::{get, post},
+    Router,
+};
 use tower_http::cors::CorsLayer;
 
-#[derive(Serialize)]
-struct Health {
-    status: &'static str,
+use std::{collections::HashMap, sync::Arc};
+use tokio::sync::{oneshot, Mutex, RwLock};
+
+pub enum AckSender {
+    Simple(oneshot::Sender<()>),
+    Draw(oneshot::Sender<DrawPhaseData>),
+    Playing(oneshot::Sender<PlayingPhaseData>),
 }
 
-async fn health() -> Json<Health> {
-    Json(Health { status: "ok" })
+#[derive(Clone)]
+pub struct AppState {
+    pub games: Arc<RwLock<HashMap<String, Arc<Mutex<GameState>>>>>,
+    pub ack_trackers: Arc<RwLock<HashMap<String, HashMap<String, AckSender>>>>,
 }
-
-// fn play_full_game(rounds: i32) {
-//     let mut players: Vec<Box<dyn BotStrategy>> = vec![
-//         Box::new(RankBot::new("RankBot".to_string())),
-//         Box::new(UseMeldBot::new("UseMeldBot".to_string())),
-//         Box::new(UseJokerBot::new("UseJokerBot".to_string())),
-//         Box::new(UseFireBot::new("UseFireBot".to_string())),
-//     ];
-// }
 
 #[tokio::main]
 async fn main() {
-    let app = Router::new()
-        .route("/api/health", get(health))
+    let state = AppState {
+        games: Arc::new(RwLock::new(HashMap::new())),
+        ack_trackers: Arc::new(RwLock::new(HashMap::new())),
+    };
+
+    let api = Router::new()
+        .route("/api/game/init_game", post(init_game))
         .layer(CorsLayer::permissive());
+
+    let ws = Router::new().route("/ws", get(websocket_handler));
+
+    let app = Router::new()
+        .merge(api)
+        .merge(ws)
+        .with_state(Arc::new(state));
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:3000")
         .await
         .unwrap();
 
     println!("🚀 Backend running on http://localhost:3000");
+    println!("🔌 WebSocket endpoint: ws://localhost:3000/ws");
     axum::serve(listener, app).await.unwrap();
 }

@@ -1,12 +1,26 @@
 use crate::logic::{Card, Meld, Rank, RoundState, Suit};
-use std::collections::HashMap;
+use serde::{Deserialize, Serialize};
+use std::{clone, collections::HashMap, fmt::Debug};
+use uuid::Uuid;
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub enum DecideDrawResult {
     Deck,
     Fire,
 }
 
-pub trait BotStrategy {
+#[derive(Serialize, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum BotStrategTypes {
+    Random,
+    RankBased,
+    UseMelds,
+    UseJoker,
+    UseFire,
+    None,
+}
+
+pub trait BotStrategy: Send + Sync + Debug {
     fn name(&self) -> &str;
     fn can_use_features(&self) -> &[String];
     fn decide_draw(&mut self, state: &RoundState) -> DecideDrawResult;
@@ -16,6 +30,14 @@ pub trait BotStrategy {
     // For UseMeldsStrategy
     fn decide_play_in_meld(&mut self, _state: &RoundState) -> (Option<Card>, i32) {
         (None, -1)
+    }
+
+    fn clone_box(&self) -> Box<dyn BotStrategy>;
+}
+
+impl Clone for Box<dyn BotStrategy> {
+    fn clone(&self) -> Box<dyn BotStrategy> {
+        self.clone_box()
     }
 }
 
@@ -44,6 +66,7 @@ pub fn group_by_suit(hand: &Vec<Card>) -> HashMap<Suit, Vec<Card>> {
 // --------------------
 
 // 1- Random Bot
+#[derive(Clone, Debug)]
 pub struct RandomBot {
     pub name: String,
     pub features: Vec<String>,
@@ -78,9 +101,13 @@ impl BotStrategy for RandomBot {
         let hand = &state.players[state.current_player].hand;
         rand::random::<usize>() % hand.len()
     }
+
+    fn clone_box(&self) -> Box<dyn BotStrategy> {
+        Box::new(self.clone())
+    }
 }
 
-// 4- Aggressive Bot (RankBot)
+#[derive(Clone, Debug)]
 pub struct RankBot {
     pub name: String,
     pub features: Vec<String>,
@@ -117,6 +144,7 @@ impl BotStrategy for RankBot {
                         meld.push(card.clone());
                         if meld.len() == 4 {
                             melds.push(Meld {
+                                id: Uuid::new_v4().to_string(),
                                 cards: meld.clone(),
                                 meld_type: crate::logic::MeldType::Rank,
                             });
@@ -126,6 +154,7 @@ impl BotStrategy for RankBot {
                 }
                 if meld.len() >= 3 {
                     melds.push(Meld {
+                        id: Uuid::new_v4().to_string(),
                         cards: meld,
                         meld_type: crate::logic::MeldType::Rank,
                     });
@@ -171,5 +200,9 @@ impl BotStrategy for RankBot {
         } else {
             hand.len() - 1 // Fallback
         }
+    }
+
+    fn clone_box(&self) -> Box<dyn BotStrategy> {
+        Box::new(self.clone())
     }
 }

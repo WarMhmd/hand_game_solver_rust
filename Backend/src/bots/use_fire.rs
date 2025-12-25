@@ -2,6 +2,7 @@ use crate::bot::{BotStrategy, DecideDrawResult};
 use crate::bots::use_joker::UseJokerBot;
 use crate::logic::{melds_value, Card, Meld, RoundState};
 
+#[derive(Clone, Debug)]
 pub struct UseFireBot {
     base: UseJokerBot,
 
@@ -111,6 +112,10 @@ impl BotStrategy for UseFireBot {
     }
     fn can_use_features(&self) -> &[String] {
         &self.base.features
+    }
+
+    fn clone_box(&self) -> Box<dyn BotStrategy> {
+        Box::new(self.clone())
     }
 
     fn decide_draw(&mut self, state: &RoundState) -> DecideDrawResult {
