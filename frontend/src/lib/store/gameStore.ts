@@ -30,5 +30,5 @@ export const useGameStore = create<GameStore>((set) => ({
 
   updateGame: (gameState) => set({ gameState }),
 
-  reset: () => set({ page: "menu", gameState: null }),
+  reset: () => set({ page: "menu", gameState: null, player: null }),
 }));

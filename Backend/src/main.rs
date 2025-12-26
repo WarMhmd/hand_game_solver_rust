@@ -12,9 +12,11 @@ mod bots {
 }
 
 use crate::logic::GameState;
-use crate::websocket::handler::PlayingPhaseData;
 use crate::websocket::websocket_handler;
-use crate::{apis::game::init_game, websocket::handler::DrawPhaseData};
+use crate::{
+    apis::game::init_game,
+    websocket::{DrawPhaseData, PlayingPhaseData},
+};
 
 use axum::{
     routing::{get, post},

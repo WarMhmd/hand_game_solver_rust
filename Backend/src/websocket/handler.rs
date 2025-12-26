@@ -7,115 +7,20 @@ use axum::{
     response::IntoResponse,
 };
 use futures::{sink::SinkExt, stream::StreamExt};
-use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::mpsc::UnboundedSender;
 
-use super::events::{handle_join_event, handle_round_started_ack};
+use super::events::{
+    handle_draw_phase_ack, handle_draw_phase_finished, handle_join_event, handle_playing_phase_ack,
+    handle_round_started_ack, handle_start_game_event,
+};
 use crate::{
-    bot::DecideDrawResult,
-    logic::{Card, Meld},
-    websocket::{events::handle_start_game_event, handle_draw_phase_ack, handle_playing_phase_ack},
+    websocket::{
+        handle_players_discard_ack, handle_players_sync_melds_ack, messages::WsMessage,
+        responses::WsResponse,
+    },
     AppState,
 };
-
-#[derive(Debug, Deserialize)]
-#[serde(tag = "event", rename_all = "camelCase")]
-enum WsMessage {
-    #[serde(rename_all = "camelCase")]
-    Join {
-        game_id: String,
-        player_id: String,
-    },
-    #[serde(rename_all = "camelCase")]
-    StartGame {
-        game_id: String,
-        player_id: String,
-    },
-    #[serde(rename_all = "camelCase")]
-    RoundStarted {
-        game_id: String,
-        player_id: String,
-        round_number: i32,
-    },
-    #[serde(rename_all = "camelCase")]
-    DrawPhaseFinished {
-        game_id: String,
-        player_id: String,
-        round_number: i32,
-        data: DrawPhaseData,
-    },
-    #[serde(rename_all = "camelCase")]
-    PlayingPhaseStarted {
-        game_id: String,
-        player_id: String,
-        round_number: i32,
-        data: PlayingPhaseData,
-    },
-    Ping,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct DrawPhaseData {
-    pub draw_choice: DecideDrawResult,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum PlayingPhaseData {
-    PlayMeldPhase(PlayMeldPhaseData),
-    PlayInMeldPhase(PlayInMeldPhaseData),
-    DiscardPhase(DiscardPhaseData),
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PlayMeldPhaseData {
-    pub melds: Vec<Meld>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PlayInMeldPhaseData {
-    pub card: Card,
-    pub meld_id: String,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct DiscardPhaseData {
-    pub card: Card,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(tag = "event", rename_all = "camelCase")]
-pub enum WsResponse {
-    Joined {
-        success: bool,
-        message: Option<String>,
-    },
-    GameStarted,
-    #[serde(rename_all = "camelCase")]
-    RoundStarted {
-        round_number: i32,
-        hand: Vec<Card>,
-        fire_card_id: Option<String>,
-        melded: bool,
-    },
-    #[serde(rename_all = "camelCase")]
-    DrawPhase {
-        player_id: String,
-    },
-    #[serde(rename_all = "camelCase")]
-    PlayingPhaseStarted {
-        player_id: String,
-    },
-    Error {
-        message: String,
-    },
-    Pong,
-}
 
 async fn handle_ws_event(
     msg: WsMessage,
@@ -147,7 +52,6 @@ async fn handle_ws_event(
             player_id,
             round_number,
         } => {
-            // Handle acknowledgment
             if let Err(e) =
                 handle_round_started_ack(&game_id, round_number, &player_id, state).await
             {
@@ -162,7 +66,6 @@ async fn handle_ws_event(
             round_number,
             data,
         } => {
-            // Handle draw phase finished
             if let Err(e) =
                 handle_draw_phase_ack(player_id, game_id, round_number, data, state).await
             {
@@ -177,11 +80,53 @@ async fn handle_ws_event(
             round_number,
             data,
         } => {
-            // Handle playing phase started
             if let Err(e) =
                 handle_playing_phase_ack(player_id, game_id, round_number, data, state).await
             {
                 println!("⚠️ Failed to handle playing phase started: {}", e);
+            }
+            None
+        }
+
+        WsMessage::DrawPhaseAck {
+            game_id,
+            player_id,
+            sender_id,
+            round_number,
+        } => {
+            if let Err(e) =
+                handle_draw_phase_finished(player_id, game_id, round_number, sender_id, state).await
+            {
+                println!("⚠️ Failed to handle draw phase ack: {}", e);
+            }
+            None
+        }
+
+        WsMessage::SyncMeldsAck {
+            game_id,
+            player_id,
+            round_number,
+            sender_id,
+        } => {
+            if let Err(e) =
+                handle_players_sync_melds_ack(game_id, round_number, player_id, sender_id, state)
+                    .await
+            {
+                println!("⚠️ Failed to handle sync melds ack: {}", e);
+            }
+            None
+        }
+
+        WsMessage::PlayerDiscardedAck {
+            game_id,
+            player_id,
+            round_number,
+            sender_id,
+        } => {
+            if let Err(e) =
+                handle_players_discard_ack(game_id, round_number, player_id, sender_id, state).await
+            {
+                println!("⚠️ Failed to handle player discarded ack: {}", e);
             }
             None
         }

@@ -28,8 +28,8 @@ pub trait BotStrategy: Send + Sync + Debug {
     fn decide_melds(&mut self, state: &RoundState) -> Vec<Meld>;
     fn decide_discard(&mut self, state: &RoundState) -> usize;
     // For UseMeldsStrategy
-    fn decide_play_in_meld(&mut self, _state: &RoundState) -> (Option<Card>, i32) {
-        (None, -1)
+    fn decide_play_in_meld(&mut self, _state: &RoundState) -> (Option<Card>, bool, i32) {
+        (None, false, -1)
     }
 
     fn clone_box(&self) -> Box<dyn BotStrategy>;

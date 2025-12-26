@@ -1,4 +1,7 @@
 use crate::bot::RandomBot;
+use crate::bots::play_in_melds::UseMeldBot;
+use crate::bots::use_fire::UseFireBot;
+use crate::bots::use_joker::UseJokerBot;
 use crate::logic::{GameState, Player};
 use crate::AppState;
 use axum::{debug_handler, extract::State, Json};
@@ -19,7 +22,7 @@ pub async fn init_game(State(state): State<Arc<AppState>>) -> Json<GameState> {
         Player {
             id: Uuid::new_v4().into(),
             name: "Bot 1".to_string(),
-            bot_strategy: Some(Box::new(RandomBot::new("Bot 1".into()))),
+            bot_strategy: Some(Box::new(UseFireBot::new("fire 1".into()))),
             score: 0,
             sender: None,
             did_join: true,
@@ -27,7 +30,7 @@ pub async fn init_game(State(state): State<Arc<AppState>>) -> Json<GameState> {
         Player {
             id: Uuid::new_v4().into(),
             name: "Bot 2".to_string(),
-            bot_strategy: Some(Box::new(RandomBot::new("Bot 2".into()))),
+            bot_strategy: Some(Box::new(UseJokerBot::new("Bot 2".into()))),
             score: 0,
             sender: None,
             did_join: true,
@@ -35,7 +38,7 @@ pub async fn init_game(State(state): State<Arc<AppState>>) -> Json<GameState> {
         Player {
             id: Uuid::new_v4().into(),
             name: "Bot 3".to_string(),
-            bot_strategy: Some(Box::new(RandomBot::new("Bot 3".into()))),
+            bot_strategy: Some(Box::new(UseMeldBot::new("Bot 3".into()))),
             score: 0,
             sender: None,
             did_join: true,

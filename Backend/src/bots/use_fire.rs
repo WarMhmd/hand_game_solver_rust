@@ -37,6 +37,12 @@ impl UseFireBot {
             if rank_ones < 3 {
                 continue;
             }
+
+            let rank_value = self.base.dp_rank_meld[take_rank as usize];
+            if rank_value == -1 {
+                continue;
+            }
+
             // cards NOT used in rank
             let remaining = (!take_rank) & (limit - 1);
 
@@ -55,10 +61,6 @@ impl UseFireBot {
                             break 'check_value;
                         }
 
-                        let rank_value = self.base.dp_rank_meld[take_rank as usize];
-                        if rank_value == -1 {
-                            break 'check_value;
-                        }
                         let seq_value = self.base.dp_rank_seq[take_seq as usize];
                         if seq_value == -1 {
                             break 'check_value;
@@ -121,6 +123,7 @@ impl BotStrategy for UseFireBot {
     fn decide_draw(&mut self, state: &RoundState) -> DecideDrawResult {
         if state.fire_pile.len() > 0 {
             let fire_card = state.fire_pile.last().unwrap().clone();
+            println!("Deciding to draw card: {}", fire_card.clone().id);
             // emulate fireCard Draw
             let mut hand: Vec<Card> = state.players[state.current_player].hand.clone();
             hand.push(fire_card);
@@ -134,9 +137,11 @@ impl BotStrategy for UseFireBot {
                 let mut seq_cards = Vec::new();
                 for i in 0..hand.len() {
                     if (self.base.best_take_rank & (1 << i)) != 0 {
+                        println!("rank card used: {}", hand[i].clone().id);
                         rank_cards.push(hand[i].clone());
                     }
                     if (self.base.best_take_seq & (1 << i)) != 0 {
+                        println!("seq card used: {}", hand[i].clone().id);
                         seq_cards.push(hand[i].clone());
                     }
                 }
@@ -146,10 +151,10 @@ impl BotStrategy for UseFireBot {
                     .extend(self.base.get_seq_meld_cards(&seq_cards));
             }
 
-            if self.base.is_melded {
+            if !self.base.is_melded {
                 if self.base.max_value >= 51 {
-                    println!("{:15b}", self.base.best_take_rank);
-                    println!("{:15b}", self.base.best_take_seq);
+                    // println!("{:15b}", self.base.best_take_rank);
+                    // println!("{:15b}", self.base.best_take_seq);
                     return DecideDrawResult::Fire;
                 } else {
                     self.is_fire_card = false;
@@ -157,8 +162,8 @@ impl BotStrategy for UseFireBot {
                 }
             } else {
                 if self.base.max_value > 0 {
-                    println!("{:15b}", self.base.best_take_rank);
-                    println!("{:15b}", self.base.best_take_seq);
+                    // println!("{:15b}", self.base.best_take_rank);
+                    // println!("{:15b}", self.base.best_take_seq);
                     return DecideDrawResult::Fire;
                 } else {
                     self.is_fire_card = false;
@@ -209,11 +214,14 @@ impl BotStrategy for UseFireBot {
         melds
     }
 
-    fn decide_play_in_meld(&mut self, state: &RoundState) -> (Option<Card>, i32) {
+    fn decide_play_in_meld(&mut self, state: &RoundState) -> (Option<Card>, bool, i32) {
         self.base.decide_play_in_meld(state)
     }
 
     fn decide_discard(&mut self, state: &RoundState) -> usize {
+        for card in &state.players[state.current_player].hand {
+            println!("Card {:?}", card.id);
+        }
         self.base.decide_discard(state)
     }
 }

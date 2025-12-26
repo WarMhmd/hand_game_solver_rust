@@ -549,7 +549,7 @@ mod tests {
         };
 
         let card = create_card("4", Suit::Hearts, Rank::Number(4));
-        let (can_play, take_joker) = can_play_in_sequence_meld(&meld, &card, false);
+        let (can_play, _, take_joker) = can_play_in_sequence_meld(&meld, &card, false);
 
         assert!(can_play);
         assert!(!take_joker);
@@ -569,7 +569,7 @@ mod tests {
         };
 
         let card = create_card("4", Suit::Diamonds, Rank::Number(6));
-        let (can_play, take_joker) = can_play_in_sequence_meld(&meld, &card, false);
+        let (can_play, _, take_joker) = can_play_in_sequence_meld(&meld, &card, false);
 
         assert!(can_play);
         assert!(!take_joker);
@@ -589,7 +589,7 @@ mod tests {
         };
 
         let card = create_card("4", Suit::Hearts, Rank::Number(7));
-        let (can_play, take_joker) = can_play_in_sequence_meld(&meld, &card, false);
+        let (can_play, _, take_joker) = can_play_in_sequence_meld(&meld, &card, false);
 
         assert!(!can_play);
         assert!(!take_joker);
@@ -609,7 +609,7 @@ mod tests {
         };
 
         let card = create_card("4", Suit::Spades, Rank::Number(9));
-        let (can_play, take_joker) = can_play_in_sequence_meld(&meld, &card, false);
+        let (can_play, _, take_joker) = can_play_in_sequence_meld(&meld, &card, false);
 
         assert!(!can_play);
         assert!(!take_joker);
@@ -629,7 +629,7 @@ mod tests {
         };
 
         let card = create_card("2", Suit::Hearts, Rank::Number(3));
-        let (can_play, take_joker) = can_play_in_sequence_meld(&meld, &card, false);
+        let (can_play, _, take_joker) = can_play_in_sequence_meld(&meld, &card, false);
 
         assert!(can_play);
         assert!(take_joker);
@@ -649,7 +649,7 @@ mod tests {
         };
 
         let card = create_card("joker2", Suit::Joker, Rank::Joker);
-        let (can_play, take_joker) = can_play_in_sequence_meld(&meld, &card, false);
+        let (can_play, _, take_joker) = can_play_in_sequence_meld(&meld, &card, false);
 
         assert!(!can_play);
         assert!(!take_joker);
@@ -669,7 +669,7 @@ mod tests {
         };
 
         let card = create_card("joker", Suit::Joker, Rank::Joker);
-        let (can_play, take_joker) = can_play_in_sequence_meld(&meld, &card, false);
+        let (can_play, _, take_joker) = can_play_in_sequence_meld(&meld, &card, false);
 
         assert!(can_play);
         assert!(!take_joker);
@@ -689,7 +689,7 @@ mod tests {
         };
 
         let card = create_card("joker", Suit::Joker, Rank::Joker);
-        let (can_play, take_joker) = can_play_in_sequence_meld(&meld, &card, true);
+        let (can_play, _, take_joker) = can_play_in_sequence_meld(&meld, &card, true);
 
         assert!(can_play);
         assert!(!take_joker);
@@ -709,7 +709,7 @@ mod tests {
         };
 
         let card = create_card("4", Suit::Hearts, Rank::Ace);
-        let (can_play, take_joker) = can_play_in_sequence_meld(&meld, &card, false);
+        let (can_play, _, take_joker) = can_play_in_sequence_meld(&meld, &card, false);
 
         assert!(can_play);
         assert!(!take_joker);
@@ -756,7 +756,7 @@ mod tests {
         ];
         state.players.push(create_test_player("P1", player_hand));
 
-        play_in_meld(&mut state, card_to_play, 0);
+        play_in_meld(&mut state, card_to_play, 0, false);
 
         // The 4-card rank meld (no jokers) should be moved to fire pile by check_melds
         assert_eq!(state.table_melds.len(), 0);
@@ -790,7 +790,7 @@ mod tests {
         ];
         state.players.push(create_test_player("P1", player_hand));
 
-        play_in_meld(&mut state, card_to_play, 0);
+        play_in_meld(&mut state, card_to_play, 0, false);
 
         // The 4-card rank meld (no jokers after replacement) moves to fire pile
         assert_eq!(state.table_melds.len(), 0);
@@ -823,7 +823,7 @@ mod tests {
         ];
         state.players.push(create_test_player("P1", player_hand));
 
-        play_in_meld(&mut state, card_to_play, 0);
+        play_in_meld(&mut state, card_to_play, 0, false);
 
         // Card should be added to meld
         assert_eq!(state.table_melds[0].cards.len(), 4);
@@ -854,7 +854,7 @@ mod tests {
         ];
         state.players.push(create_test_player("P1", player_hand));
 
-        play_in_meld(&mut state, card_to_play, 0);
+        play_in_meld(&mut state, card_to_play, 0, false);
 
         // Meld should still have 3 cards (joker replaced)
         assert_eq!(state.table_melds[0].cards.len(), 3);
@@ -885,7 +885,7 @@ mod tests {
         ];
         state.players.push(create_test_player("P1", player_hand));
 
-        play_in_meld(&mut state, card_to_play, 0); // No melds exist
+        play_in_meld(&mut state, card_to_play, 0, false); // No melds exist
     }
 
     #[test]
@@ -909,7 +909,7 @@ mod tests {
         let player_hand = vec![create_card("p2", Suit::Hearts, Rank::Number(3))];
         state.players.push(create_test_player("P1", player_hand));
 
-        play_in_meld(&mut state, card_to_play, 0);
+        play_in_meld(&mut state, card_to_play, 0, false);
     }
 
     #[test]
@@ -933,7 +933,7 @@ mod tests {
         let player_hand = vec![card_to_play.clone()];
         state.players.push(create_test_player("P1", player_hand));
 
-        play_in_meld(&mut state, card_to_play, 0);
+        play_in_meld(&mut state, card_to_play, 0, false);
     }
 
     #[test]
@@ -961,7 +961,7 @@ mod tests {
         ];
         state.players.push(create_test_player("P1", player_hand));
 
-        play_in_meld(&mut state, card_to_play, 0);
+        play_in_meld(&mut state, card_to_play, 0, false);
 
         // check_melds should split the 6-card sequence into two 3-card sequences
         assert_eq!(state.table_melds.len(), 2);
@@ -992,7 +992,7 @@ mod tests {
         ];
         state.players.push(create_test_player("P1", player_hand));
 
-        play_in_meld(&mut state, card_to_play, 0);
+        play_in_meld(&mut state, card_to_play, 0, false);
 
         // Meld should be moved to fire pile
         assert_eq!(state.table_melds.len(), 0);
@@ -1022,7 +1022,7 @@ mod tests {
         ];
         state.players.push(create_test_player("P1", player_hand));
 
-        play_in_meld(&mut state, card_to_play, 0);
+        play_in_meld(&mut state, card_to_play, 0, false);
 
         // State should remain unchanged
         assert_eq!(state.table_melds[0].cards.len(), 3);

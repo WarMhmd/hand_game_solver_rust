@@ -4,97 +4,276 @@ This module handles WebSocket connections and messaging for the game.
 
 ## Architecture
 
-The WebSocket system uses an **mpsc channel-based architecture**:
+The WebSocket system uses an **mpsc channel-based architecture** with **acknowledgment tracking**:
 
 1. When a WebSocket connection is established, an `UnboundedSender<Message>` is created
 2. This sender is stored in the `Player` struct when they join a game
 3. Messages can be sent to players through their sender, which forwards to their WebSocket connection
+4. The system can wait for player acknowledgments before proceeding with game logic
 
-## Components
+## Module Structure
 
-- **`handler.rs`** - WebSocket connection handling and message routing
-- **`events.rs`** - Event handlers and utility functions for messaging
-- **`mod.rs`** - Module exports
+The module has been reorganized for better maintainability:
+
+```
+websocket/
+├── mod.rs           # Module exports
+├── handler.rs       # WebSocket connection handling
+├── events.rs        # Event handlers and send/wait utilities
+├── messages.rs      # Incoming message types (WsMessage)
+├── responses.rs     # Outgoing response types (WsResponse)
+└── README.md        # This file
+```
+
+### File Purposes
+
+- **`handler.rs`** - Handles WebSocket upgrade, connection lifecycle, and message routing
+- **`events.rs`** - Contains all event handlers and reusable send-and-wait patterns
+- **`messages.rs`** - Defines all incoming message types from clients (`WsMessage` enum and related structs)
+- **`responses.rs`** - Defines all outgoing message types to clients (`WsResponse` enum)
+- **`mod.rs`** - Public API exports
+
+## Message Types
+
+### Incoming Messages (messages.rs)
+
+```rust
+WsMessage::Join { game_id, player_id }
+WsMessage::StartGame { game_id, player_id }
+WsMessage::RoundStarted { game_id, player_id, round_number }
+WsMessage::DrawPhaseAck { game_id, player_id, round_number }
+WsMessage::DrawPhaseFinished { game_id, player_id, round_number, data }
+WsMessage::PlayingPhaseStarted { game_id, player_id, round_number, data }
+WsMessage::Ping
+```
+
+### Outgoing Responses (responses.rs)
+
+```rust
+WsResponse::Joined { success, message }
+WsResponse::GameStarted
+WsResponse::RoundStarted { round_number, hand, fire_card_id, melded }
+WsResponse::DrawPhase { player_id }
+WsResponse::DrawnCard { player_id, card, is_fire_card }
+WsResponse::PlayingPhaseStarted { player_id }
+WsResponse::Error { message }
+WsResponse::Pong
+```
+
+## Event Handler Pattern
+
+The `events.rs` file uses a **generic send-and-wait pattern** to reduce code duplication:
+
+### Generic Functions
+
+1. **`send_and_wait<T>`** - Generic function that:
+   - Creates channels for acknowledgments
+   - Stores them in the tracker
+   - Sends messages
+   - Waits for responses with timeout
+   - Cleans up after completion
+
+2. **`handle_ack<T>`** - Generic function that:
+   - Retrieves the session from tracker
+   - Extracts the correct channel type
+   - Sends the acknowledgment data
+   - Handles type mismatches
+
+### Event Categories
+
+Events are organized into logical sections:
+
+1. **Game Setup Events** - Join, start game
+2. **Message Sending Utilities** - Send to player, broadcast
+3. **Generic Pattern** - Reusable send-and-wait logic
+4. **Round Started Events** - Round initialization
+5. **Draw Phase Events** - Card drawing decisions
+6. **Draw Card Events** - Card drawing completion
+7. **Playing Phase Events** - Playing melds, discarding
 
 ## Usage Examples
 
 ### Sending a Message to a Specific Player
 
 ```rust
-use crate::websocket::send_to_player;
-use serde::Serialize;
+use crate::websocket::{send_to_player, WsResponse};
 
-#[derive(Serialize)]
-struct GameUpdate {
-    event: String,
-    data: String,
-}
-
-// Assuming you have access to the player's sender
 if let Some(sender) = &player.sender {
-    let message = GameUpdate {
-        event: "gameUpdate".to_string(),
-        data: "Your turn!".to_string(),
+    let message = WsResponse::DrawPhase {
+        player_id: player.id.clone(),
     };
     send_to_player(sender, message);
 }
 ```
 
-### Broadcasting to All Players in a Game
+### Broadcasting to All Players
 
 ```rust
-use crate::websocket::broadcast_to_game;
-use serde::Serialize;
+use crate::websocket::{broadcast_to_game, WsResponse};
 
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct GameStarted {
-    event: String,
-    game_id: String,
-}
-
-let message = GameStarted {
-    event: "gameStarted".to_string(),
-    game_id: game_id.clone(),
-};
-
-broadcast_to_game(&game_id, message, &state).await?;
+let message = WsResponse::GameStarted;
+broadcast_to_game(&game.players, message).await?;
 ```
 
-### Finding a Player and Sending a Message
+### Waiting for Player Acknowledgment
 
 ```rust
-use crate::websocket::send_to_player;
+use crate::websocket::send_round_start_and_wait;
+use std::time::Duration;
 
-let games = state.games.read().await;
-if let Some(game) = games.get(&game_id) {
-    if let Some(player) = game.players.iter().find(|p| p.id == player_id) {
-        if let Some(sender) = &player.sender {
-            send_to_player(sender, YourMessage { /* ... */ });
-        }
+// Prepare player data
+let players_data = players.iter().map(|p| {
+    (p.id.clone(), p.hand.clone(), p.fire_card_id.clone(), p.melded)
+}).collect();
+
+// Send and wait for all players to acknowledge
+send_round_start_and_wait(
+    &game_id,
+    round_number,
+    players_data,
+    &players,
+    state,
+    Duration::from_secs(5),
+).await?;
+```
+
+### Waiting for Player Data Response
+
+```rust
+use crate::websocket::send_player_draw_phase_and_wait;
+
+// Send draw phase message and wait for player's choice
+let draw_choice = send_player_draw_phase_and_wait(
+    &active_player,
+    &game_id,
+    round_number,
+    state,
+).await?;
+
+// Use the draw choice data
+match draw_choice.draw_choice {
+    DecideDrawResult::DrawFromDeck => { /* ... */ }
+    DecideDrawResult::DrawFromDiscard => { /* ... */ }
+}
+```
+
+## Acknowledgment System
+
+The system tracks player acknowledgments using oneshot channels stored in `AppState.ack_trackers`.
+
+### Session Keys
+
+- `"{game_id}:round_{round_number}"` - Round start acknowledgments
+- `"DrawPhase-{game_id}-{round_number}-{player_id}"` - Draw phase responses
+- `"DrawCard-{game_id}-{round_number}-{player_id}"` - Draw card acknowledgments
+- `"PlayingPhase-{game_id}-{round_number}-{player_id}"` - Playing phase responses
+
+### AckSender Types
+
+```rust
+pub enum AckSender {
+    Simple(oneshot::Sender<()>),           // For void acknowledgments
+    Draw(oneshot::Sender<DrawPhaseData>),  // For draw choices
+    Playing(oneshot::Sender<PlayingPhaseData>), // For playing actions
+}
+```
+
+## Client-Side Integration
+
+### Acknowledging Round Start
+
+```typescript
+socket.addEventListener('message', (event) => {
+    const data = JSON.parse(event.data);
+    
+    if (data.event === 'roundStarted') {
+        // Update UI
+        updateGameState(data.hand, data.fire_card_id, data.melded);
+        
+        // Send acknowledgment
+        socket.send(JSON.stringify({
+            event: 'roundStarted',
+            gameId: currentGameId,
+            playerId: currentPlayerId,
+            round_number: data.round_number
+        }));
     }
-}
+});
 ```
 
-## Message Flow
+### Responding with Data
 
-1. **Client → Server**: Client sends JSON message over WebSocket
-2. **Server Parses**: Message is parsed into `WsMessage` enum
-3. **Event Handler**: Appropriate event handler processes the message
-4. **Response**: Server can respond immediately or send messages later via the stored sender
-
-## Key Types
-
-- `UnboundedSender<Message>` - Channel sender for sending messages to a WebSocket connection
-- `WsMessage` - Incoming message types from clients
-- `WsResponse` - Outgoing response types to clients
+```typescript
+socket.addEventListener('message', (event) => {
+    const data = JSON.parse(event.data);
+    
+    if (data.event === 'drawPhase') {
+        // Show draw UI, get user choice
+        const choice = await getUserDrawChoice();
+        
+        // Send response with data
+        socket.send(JSON.stringify({
+            event: 'drawPhaseFinished',
+            gameId: currentGameId,
+            playerId: currentPlayerId,
+            round_number: currentRound,
+            data: {
+                draw_choice: choice // "DrawFromDeck" or "DrawFromDiscard"
+            }
+        }));
+    }
+});
+```
 
 ## Adding New Events
 
-1. Add a new variant to `WsMessage` in `handler.rs`
-2. Add a new variant to `WsResponse` if needed
-3. Create a handler function in `events.rs`
-4. Add the handler to the match statement in `handle_ws_event()`
+1. **Add message type** in `messages.rs`:
+   ```rust
+   #[serde(rename_all = "camelCase")]
+   NewEvent {
+       game_id: String,
+       player_id: String,
+       // ... other fields
+   }
+   ```
+
+2. **Add response type** in `responses.rs` (if needed):
+   ```rust
+   #[serde(rename_all = "camelCase")]
+   NewResponse {
+       // ... response fields
+   }
+   ```
+
+3. **Create handler** in `events.rs`:
+   ```rust
+   pub async fn handle_new_event(...) -> Result<(), String> {
+       // Implementation
+   }
+   ```
+
+4. **Route in handler.rs**:
+   ```rust
+   WsMessage::NewEvent { ... } => {
+       handle_new_event(...).await?;
+       None
+   }
+   ```
+
+## Benefits of This Organization
+
+1. **Reduced Duplication**: Generic `send_and_wait` and `handle_ack` functions eliminate repetitive code
+2. **Clear Separation**: Messages and responses are in separate files for clarity
+3. **Maintainable**: Each file has a single, clear purpose
+4. **Type Safety**: Strong typing for all message and response types
+5. **Scalable**: Easy to add new events following the established patterns
+
+## Error Handling
+
+- **Timeouts**: All wait operations have configurable timeouts
+- **Disconnections**: Failed sends are handled gracefully
+- **Type Mismatches**: Acknowledgment type validation prevents incorrect channel usage
+- **Session Cleanup**: Automatic cleanup prevents memory leaks
 
 ## Notes
 
@@ -102,94 +281,4 @@ if let Some(game) = games.get(&game_id) {
 - If a player disconnects, their sender will be dropped and messages will fail silently
 - Always check if `player.sender.is_some()` before attempting to send
 - The sender is set when a player joins the game via the `Join` event
-
-## Waiting for Player Acknowledgments
-
-The system supports waiting for all players to acknowledge receiving a message before proceeding.
-
-### How It Works
-
-1. **Broadcast with acknowledgment tracking**: Use `broadcast_and_wait_for_acks()` to send a message and wait
-2. **Clients acknowledge**: Clients send back a `RoundStarted` event with their player_id
-3. **Server proceeds**: Once all players acknowledge, the server continues execution
-
-### Example: Waiting for Round Start Acknowledgments
-
-```rust
-use crate::websocket::{broadcast_and_wait_for_acks, WsResponse};
-use std::time::Duration;
-
-// In your game logic (e.g., start_game function)
-pub async fn start_round(
-    game_id: &str,
-    round_number: i32,
-    players: &Vec<Player>,
-    state: &Arc<AppState>,
-) -> Result<(), String> {
-    // Prepare the round data for each player
-    let mut messages_for_players = Vec::new();
-    
-    for player in players {
-        let message = WsResponse::RoundStarted {
-            round_number,
-            hand: player.hand.clone(),
-            fire_card_id: player.fire_card_id.clone(),
-            melded: player.melded,
-        };
-        messages_for_players.push((player.id.clone(), message));
-    }
-
-    // Broadcast and wait for all players to acknowledge (with 5 second timeout)
-    match broadcast_and_wait_for_acks(
-        game_id,
-        round_number,
-        players,
-        WsResponse::RoundStarted { /* ... */ },
-        state,
-        Duration::from_secs(5),
-    ).await {
-        Ok(()) => {
-            println!("✅ All players acknowledged round start");
-            // Continue with game logic...
-        }
-        Err(e) => {
-            println!("⚠️ Failed to get all acknowledgments: {}", e);
-            // Handle timeout or error...
-        }
-    }
-
-    Ok(())
-}
-```
-
-### Client-Side Example (JavaScript/TypeScript)
-
-```typescript
-// When receiving round started message
-socket.addEventListener('message', (event) => {
-    const data = JSON.parse(event.data);
-    
-    if (data.event === 'roundStarted') {
-        const { round_number, hand, fire_card_id, melded } = data;
-        
-        // Update your UI with the round data
-        updateGameState(hand, fire_card_id, melded);
-        
-        // Send acknowledgment back to server
-        socket.send(JSON.stringify({
-            event: 'roundStarted',
-            gameId: currentGameId,
-            playerId: currentPlayerId,
-            round_number: round_number
-        }));
-    }
-});
-```
-
-### Key Points
-
-- **Timeout**: Always specify a reasonable timeout to avoid waiting forever
-- **Error Handling**: Handle both timeout errors and acknowledgment failures
-- **Session Keys**: The system tracks acknowledgments using `game_id:round_N` format
-- **Automatic Cleanup**: Sessions are automatically cleaned up after completion or timeout
-- **Player Filtering**: Only players with active senders are tracked for acknowledgments
+- All acknowledgment sessions are automatically cleaned up after completion or timeout

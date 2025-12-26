@@ -2,8 +2,8 @@
 // Types
 // --------------------
 
-export type Suit = "Hearts" | "Diamonds" | "Clubs" | "Spades" | "Joker";
-export type Rank = 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | "J" | "Q" | "K" | "A" | "Joker";
+export type Suit = "Hearts" | "Diamonds" | "Clubs" | "Spades" | "Joker" | "Hidden";
+export type Rank = 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | "J" | "Q" | "K" | "A" | "Joker" | "Hidden";
 
 export const rankOrder: Record<Rank, number[]> = {
   2: [1],
@@ -20,6 +20,7 @@ export const rankOrder: Record<Rank, number[]> = {
   K: [12],
   A: [0, 13],
   Joker: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13],
+  Hidden: [],
 };
 
 export interface Card {
@@ -28,11 +29,12 @@ export interface Card {
   rank: Rank;
 }
 
-export type MeldType = "rank" | "sequence";
+export type MeldType = "Rank" | "Sequence";
 
 export interface Meld {
+  id: string;
   cards: Card[];
-  type: "rank" | "sequence";
+  meldType: MeldType;
 }
 
 export interface Player {
@@ -86,11 +88,11 @@ export function meldValue(meld: Meld): number {
 
   if (jokerCard) {
     // calculate joker value depending on what value he is in
-    if (meld.type == "rank") {
+    if (meld.meldType == "Rank") {
       // get first non joker card
       const firstCard = meld.cards.find((card) => card.rank !== "Joker")!;
       meldValue += cardValue(firstCard);
-    } else if (meld.type == "sequence") {
+    } else if (meld.meldType == "Sequence") {
       // get the card before and after joker
       const cardIndex = meld.cards.indexOf(jokerCard);
       const prevCard = meld.cards.at(cardIndex - 1);
@@ -155,13 +157,15 @@ export const checkMelds = (state: RoundState) => {
         for (let i = 0; i < meld.cards.length; i += 3) {
           if (i + 3 <= meld.cards.length && i + 6 <= meld.cards.length) {
             addedMelds.push({
+              id: crypto.randomUUID(),
               cards: meld.cards.slice(i, i + 3),
-              type: "sequence",
+              meldType: "Sequence",
             });
           } else {
             addedMelds.push({
+              id: crypto.randomUUID(),
               cards: meld.cards.slice(i),
-              type: "sequence",
+              meldType: "Sequence",
             });
             break;
           }
@@ -172,6 +176,44 @@ export const checkMelds = (state: RoundState) => {
 
   removeIndex.forEach((index) => state.tableMelds.splice(index, 1));
   addedMelds.forEach((meld) => state.tableMelds.push(meld));
+};
+
+export const handMelds = (hand: Card[]): string[] => {
+  const cardsIds: string[] = [];
+  for (let i = 0; i < hand.length; i++) {
+    if (i + 3 > hand.length) break;
+    const meldCards = hand.slice(i, i + 3);
+
+    if (validRankMeld(meldCards)) {
+      if (i + 4 <= hand.length) {
+        const fourthCard = hand[i + 3];
+        if (validRankMeld([...meldCards, fourthCard])) {
+          meldCards.push(fourthCard);
+        }
+      }
+      cardsIds.push(...meldCards.map((c) => c.id));
+      i = i + meldCards.length - 1;
+      continue;
+    }
+
+    if (validSequenceMeld(meldCards)) {
+      let j = i + 3;
+      while (j < hand.length) {
+        const nextCard = hand[j];
+        if (validSequenceMeld([...meldCards, nextCard])) {
+          meldCards.push(nextCard);
+          j++;
+        } else {
+          break;
+        }
+      }
+      cardsIds.push(...meldCards.map((c) => c.id));
+      i = j - 1;
+      continue;
+    }
+  }
+
+  return cardsIds;
 };
 
 // --------------------
@@ -192,24 +234,38 @@ export function validRankMeld(meldCards: Card[]): boolean {
 }
 
 export function validSequenceMeld(cards: Card[]): boolean {
-  if (cards.length < 3) return false;
-  if (cards.filter((c) => c.rank === "Joker").length > 1) return false;
+  if (cards.length < 3) {
+    // console.log("Sequence meld must have at least 3 cards");
+    return false;
+  }
+  if (cards.filter((c) => c.rank === "Joker").length > 1) {
+    // console.log("Sequence meld can have at most one joker");
+    return false;
+  }
 
   const firstCard = cards.find((c) => c.rank !== "Joker")!;
   const sameSuit = cards.every((c) => c.rank === "Joker" || c.suit === firstCard.suit);
-  if (!sameSuit) return false;
+  if (!sameSuit) {
+    // console.log("Sequence meld must have the same suit");
+    return false;
+  }
   for (let i = 1; i < cards.length; i++) {
     if (!validSequenceTwoCards(cards[i - 1], cards[i])) return false;
     if (i == 1 && cards[i - 1].rank === "Joker" && cards[i].rank === "A") {
+      //   console.log("Joker cannot be before Ace at the start");
       return false;
     }
     if (i == cards.length - 1 && cards[i].rank === "Joker" && cards[i - 1].rank === "A") {
+      //   console.log("Joker cannot be after Ace at the end");
       return false;
     }
     if (cards[i].rank === "Joker") {
       if (i === cards.length - 1) continue;
       const nextCard = cards[i + 1];
-      if (cardValue(nextCard) !== cardValue(cards[i - 1]) + 2) return false;
+      if (rankOrder[nextCard.rank].at(-1)! !== rankOrder[cards[i - 1].rank][0] + 2) {
+        // console.log("Joker placement invalid in sequence meld");
+        return false;
+      }
     }
   }
   return true;
@@ -286,10 +342,10 @@ export function canPlayInSequenceMeld(meld: Meld, card: Card, playEnd: boolean =
 
 export function isValidSet(meld: Meld): boolean {
   // check if meld is a same rank
-  if (meld.type === "rank" && validRankMeld(meld.cards)) return true;
+  if (meld.meldType === "Rank" && validRankMeld(meld.cards)) return true;
 
   // check if meld is a sequence
-  if (meld.type === "sequence" && validSequenceMeld(meld.cards)) return true;
+  if (meld.meldType === "Sequence" && validSequenceMeld(meld.cards)) return true;
 
   return false;
 }
@@ -347,6 +403,40 @@ export function layMelds(state: RoundState, melds: Meld[]): RoundState {
   return state;
 }
 
+export function canPlayCardInMeld(state: RoundState, card: Card, meldIndex: number, isLeft: boolean = true): boolean {
+  const player = state.players[state.currentPlayer];
+  const meld = state.tableMelds[meldIndex];
+
+  if (!meld) {
+    console.error("Meld not found");
+    return false;
+  }
+  if (!player.hand.some((c) => c.id === card.id)) {
+    console.error("Card not in hand");
+    return false;
+  }
+
+  if (player.hand.length == 1) {
+    console.error("Cannot play last card in hand");
+    return false;
+  }
+
+  if (meld.meldType == "Rank") {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const [success, _] = canPlayInRankMeld(meld, card);
+    if (!success) return false;
+    return true;
+  }
+
+  if (meld.meldType == "Sequence") {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const [success, _] = canPlayInSequenceMeld(meld, card, !isLeft);
+    if (!success) return false;
+    return true;
+  }
+  return false;
+}
+
 export function PlayInMeld(state: RoundState, card: Card, meldIndex: number) {
   const player = state.players[state.currentPlayer];
   const meld = state.tableMelds[meldIndex];
@@ -356,7 +446,7 @@ export function PlayInMeld(state: RoundState, card: Card, meldIndex: number) {
 
   if (player.hand.length == 1) throw new Error("Cannot play last card in hand");
 
-  if (meld.type == "rank") {
+  if (meld.meldType == "Rank") {
     const [success, takeJoker] = canPlayInRankMeld(meld, card);
     if (!success) return;
     if (takeJoker) {
@@ -376,7 +466,7 @@ export function PlayInMeld(state: RoundState, card: Card, meldIndex: number) {
     );
   }
 
-  if (meld.type == "sequence") {
+  if (meld.meldType == "Sequence") {
     const [success, takeJoker] = canPlayInSequenceMeld(meld, card);
     if (!success) return;
     if (takeJoker) {

@@ -1298,6 +1298,11 @@ impl UseJokerBot {
             if rank_ones < 3 {
                 continue;
             }
+
+            let rank_value = self.dp_rank_meld[take_rank as usize];
+            if rank_value == -1 {
+                continue;
+            }
             // cards NOT used in rank
             let remaining = (!take_rank) & (limit - 1);
 
@@ -1312,10 +1317,6 @@ impl UseJokerBot {
                             break 'check_value;
                         }
 
-                        let rank_value = self.dp_rank_meld[take_rank as usize];
-                        if rank_value == -1 {
-                            break 'check_value;
-                        }
                         let seq_value = self.dp_rank_seq[take_seq as usize];
                         if seq_value == -1 {
                             break 'check_value;
@@ -1417,16 +1418,17 @@ impl BotStrategy for UseJokerBot {
         melds
     }
 
-    fn decide_play_in_meld(&mut self, state: &RoundState) -> (Option<Card>, i32) {
+    fn decide_play_in_meld(&mut self, state: &RoundState) -> (Option<Card>, bool, i32) {
         let player = &state.players[state.current_player];
         if !player.melded {
-            return (None, -1);
+            return (None, false, -1);
         }
         if player.hand.len() == 1 {
-            return (None, -1);
+            return (None, false, -1);
         }
         let mut meld_index = -1;
         let mut found_card: Option<Card> = None;
+        let mut is_left = false;
 
         for card in &player.hand {
             let mut flag = false;
@@ -1435,7 +1437,8 @@ impl BotStrategy for UseJokerBot {
                     continue;
                 }
                 if meld.meld_type == MeldType::Sequence {
-                    let (success, _) = can_play_in_sequence_meld(meld, card, false);
+                    let (success, play_left, _) = can_play_in_sequence_meld(meld, card, true);
+                    is_left = play_left;
                     if success {
                         flag = true;
                         meld_index = index as i32;
@@ -1454,7 +1457,7 @@ impl BotStrategy for UseJokerBot {
                 break;
             }
         }
-        (found_card, meld_index)
+        (found_card, is_left, meld_index)
     }
 
     fn decide_discard(&mut self, state: &RoundState) -> usize {
