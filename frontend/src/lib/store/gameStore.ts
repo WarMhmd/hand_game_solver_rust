@@ -7,18 +7,20 @@ type GameStore = {
   page: Page;
   player: Player | null;
   gameState: GameState | null;
-
+  endPoint: string;
   // actions
   goTo: (page: Page) => void;
   startGame: (gameState: GameState) => void;
   updateGame: (gameState: GameState) => void;
   reset: () => void;
+  setEndPoint: (endPoint: string) => void;
 };
 
 export const useGameStore = create<GameStore>((set) => ({
   page: "menu",
   gameState: null,
   player: null,
+  endPoint: "init_game",
   goTo: (page) => set({ page }),
 
   startGame: (gameState) =>
@@ -31,4 +33,5 @@ export const useGameStore = create<GameStore>((set) => ({
   updateGame: (gameState) => set({ gameState }),
 
   reset: () => set({ page: "menu", gameState: null, player: null }),
+  setEndPoint: (endPoint) => set({ endPoint }),
 }));

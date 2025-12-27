@@ -1,10 +1,12 @@
+use std::any::Any;
+
 use uuid::Uuid;
 
 use crate::bot::{group_by_rank, group_by_suit, BotStrategy, DecideDrawResult};
 use crate::bots::play_with_sequence;
 use crate::logic::{
     can_play_in_rank_meld, can_play_in_sequence_meld, melds_value, rank_order,
-    valid_sequence_two_cards, Card, Meld, MeldType, Rank, RoundState,
+    valid_sequence_two_cards, Card, Meld, MeldType, Phase, Rank, RoundState,
 };
 
 #[derive(Clone, Debug)]
@@ -93,7 +95,12 @@ impl BotStrategy for UseMeldBot {
                 for i in 1..sorted_cards.len() {
                     let card = &sorted_cards[i];
                     let prev_card = &sorted_cards[i - 1];
-                    if !valid_sequence_two_cards(prev_card, card) {
+                    if !valid_sequence_two_cards(
+                        prev_card,
+                        card,
+                        i == 1,
+                        i == sorted_cards.len() - 1,
+                    ) {
                         if meld.len() >= 3 {
                             first_melds.push(Meld {
                                 id: Uuid::new_v4().to_string(),
@@ -135,7 +142,12 @@ impl BotStrategy for UseMeldBot {
                 for i in 1..sorted_cards.len() {
                     let card = &sorted_cards[i];
                     let prev_card = &sorted_cards[i - 1];
-                    if !valid_sequence_two_cards(prev_card, card) {
+                    if !valid_sequence_two_cards(
+                        prev_card,
+                        card,
+                        i == 1,
+                        i == sorted_cards.len() - 1,
+                    ) {
                         if meld.len() >= 3 {
                             second_melds.push(Meld {
                                 id: Uuid::new_v4().to_string(),
@@ -183,13 +195,13 @@ impl BotStrategy for UseMeldBot {
         melds
     }
 
-    fn decide_play_in_meld(&mut self, state: &RoundState) -> (Option<Card>, bool, i32) {
+    fn decide_play_in_meld(&mut self, state: &RoundState) -> (Phase, Option<Card>, bool, i32) {
         let player = &state.players[state.current_player];
         if !player.melded {
-            return (None, false, -1);
+            return (Phase::Discard, None, false, -1);
         }
         if player.hand.len() == 1 {
-            return (None, false, -1);
+            return (Phase::Discard, None, false, -1);
         }
         let mut meld_index = -1;
         let mut found_card: Option<Card> = None;
@@ -222,7 +234,16 @@ impl BotStrategy for UseMeldBot {
                 break;
             }
         }
-        (found_card, is_left, meld_index)
+        (
+            if meld_index == -1 {
+                Phase::Discard
+            } else {
+                Phase::PlayInMeld
+            },
+            found_card,
+            is_left,
+            meld_index,
+        )
     }
 
     fn decide_discard(&mut self, state: &RoundState) -> usize {
@@ -238,5 +259,12 @@ impl BotStrategy for UseMeldBot {
         } else {
             hand.len() - 1
         }
+    }
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
     }
 }

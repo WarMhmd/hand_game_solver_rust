@@ -5,6 +5,8 @@ mod apis {
     pub mod game;
 }
 mod bots {
+    pub mod better_discard;
+    pub mod better_meld_play;
     pub mod play_in_melds;
     pub mod play_with_sequence;
     pub mod use_fire;
@@ -14,7 +16,7 @@ mod bots {
 use crate::logic::GameState;
 use crate::websocket::websocket_handler;
 use crate::{
-    apis::game::init_game,
+    apis::game::{init_game, init_game_with_random_all_bots, init_game_with_random_strong_bots},
     websocket::{DrawPhaseData, PlayingPhaseData},
 };
 
@@ -48,6 +50,14 @@ async fn main() {
 
     let api = Router::new()
         .route("/api/game/init_game", post(init_game))
+        .route(
+            "/api/game/init_game_with_random_strong_bots",
+            post(init_game_with_random_strong_bots),
+        )
+        .route(
+            "/api/game/init_game_with_random_all_bots",
+            post(init_game_with_random_all_bots),
+        )
         .layer(CorsLayer::permissive());
 
     let ws = Router::new().route("/ws", get(websocket_handler));

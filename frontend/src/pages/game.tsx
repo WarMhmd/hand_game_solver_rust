@@ -4,6 +4,7 @@ import {
   DragOverlay,
   KeyboardSensor,
   PointerSensor,
+  TouchSensor,
   closestCenter,
   pointerWithin,
   useDroppable,
@@ -136,6 +137,27 @@ function meldsFromHandOrderForValue(hand: Card[]): Meld[] {
       i = j - 1;
       continue;
     }
+
+    meldCards.reverse();
+    if (validSequenceMeld(meldCards)) {
+      let j = i + 3;
+      while (j < hand.length) {
+        const nextCard = hand[j];
+        if (validSequenceMeld([nextCard, ...meldCards])) {
+          meldCards.unshift(nextCard);
+          j++;
+        } else {
+          break;
+        }
+      }
+      melds.push({
+        id: crypto.randomUUID(),
+        cards: [...meldCards],
+        meldType: "Sequence",
+      });
+      i = j - 1;
+      continue;
+    }
   }
 
   return melds;
@@ -195,7 +217,7 @@ function SortableHandCard({ card, disabled, zIndex, highlight }: { card: Card; d
 
   return (
     <div ref={setNodeRef} style={style} className={isDragging ? "opacity-40" : undefined}>
-      <div {...attributes} {...listeners}>
+      <div {...attributes} {...listeners} style={{ touchAction: "none" }}>
         <PlayingCard card={card} draggable={!disabled} highlight={highlight} />
       </div>
     </div>
@@ -544,7 +566,9 @@ export default function GamePage() {
 
   const { send } = useGameSocket();
 
-  const { player, gameState } = useGameStore(useShallow((s) => ({ player: s.player!, gameState: s.gameState! })));
+  const { player, gameState, endPoint } = useGameStore(
+    useShallow((s) => ({ player: s.player!, gameState: s.gameState!, endPoint: s.endPoint }))
+  );
   const startNewGame = useGameStore((s) => s.startGame);
   const resetToMenu = useGameStore((s) => s.reset);
   const { activePlayer, roundState } = useRoundStore(useShallow((s) => ({ activePlayer: s.player, roundState: s.roundState })));
@@ -631,6 +655,9 @@ export default function GamePage() {
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
+      activationConstraint: { distance: 6 },
+    }),
+    useSensor(TouchSensor, {
       activationConstraint: { distance: 6 },
     }),
     useSensor(KeyboardSensor, {
@@ -910,6 +937,7 @@ export default function GamePage() {
 
             addFlyItem({
               from: source,
+
               to: target,
               view: { kind: "face", card: usedCard, size: "sm" },
               durationMs: 520,
@@ -1087,7 +1115,7 @@ export default function GamePage() {
   }
 
   function handlePlayInMeld(meldIndex: number, cardId: string, isLeft: boolean) {
-    if (!roundState || !canPlayInMeld) return;
+    if (!roundState || !canPlayInMeld || !activePlayer || !activePlayer.melded) return;
     const card = findCardInYourHand(cardId);
     if (!card) return;
 
@@ -1257,7 +1285,7 @@ export default function GamePage() {
                       onClick={async () => {
                         try {
                           setWinActionPending(true);
-                          const result = await callStartGame();
+                          const result = await callStartGame(endPoint);
                           startNewGame(result);
                           setWinScreen(null);
                         } catch (e) {
@@ -1350,19 +1378,19 @@ export default function GamePage() {
 
           {/* Top player */}
           <PlayerArea
-            player={players[1]}
+            player={players[2]}
             stackDirection="horizontal"
-            isCurrent={roundState.currentPlayer === 1}
+            isCurrent={roundState.currentPlayer === 2}
             registerEl={registerPlayerAreaEl}
           />
 
           {/* Middle table */}
           <div className="flex justify-between items-center gap-2 sm:gap-0">
             <PlayerArea
-              player={players[2]}
+              player={players[1]}
               stackDirection="vertical"
               stackMirror
-              isCurrent={roundState.currentPlayer === 2}
+              isCurrent={roundState.currentPlayer === 1}
               registerEl={registerPlayerAreaEl}
             />
 

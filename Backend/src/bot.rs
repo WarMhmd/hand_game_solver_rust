@@ -1,6 +1,6 @@
-use crate::logic::{Card, Meld, Rank, RoundState, Suit};
+use crate::logic::{Card, Meld, Phase, Rank, RoundState, Suit};
 use serde::{Deserialize, Serialize};
-use std::{clone, collections::HashMap, fmt::Debug};
+use std::{any::Any, clone, collections::HashMap, fmt::Debug};
 use uuid::Uuid;
 
 #[derive(Debug, Deserialize)]
@@ -10,17 +10,17 @@ pub enum DecideDrawResult {
     Fire,
 }
 
-#[derive(Serialize, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum BotStrategTypes {
-    Random,
-    RankBased,
-    UseMelds,
-    UseJoker,
-    UseFire,
-    None,
-}
+// #[derive(Serialize, Clone, Copy, PartialEq, Eq, Hash)]
+// pub enum BotStrategTypes {
+//     Random,
+//     RankBased,
+//     UseMelds,
+//     UseJoker,
+//     UseFire,
+//     None,
+// }
 
-pub trait BotStrategy: Send + Sync + Debug {
+pub trait BotStrategy: Any + Send + Sync + Debug {
     fn name(&self) -> &str;
     fn can_use_features(&self) -> &[String];
     fn decide_draw(&mut self, state: &RoundState) -> DecideDrawResult;
@@ -28,11 +28,14 @@ pub trait BotStrategy: Send + Sync + Debug {
     fn decide_melds(&mut self, state: &RoundState) -> Vec<Meld>;
     fn decide_discard(&mut self, state: &RoundState) -> usize;
     // For UseMeldsStrategy
-    fn decide_play_in_meld(&mut self, _state: &RoundState) -> (Option<Card>, bool, i32) {
-        (None, false, -1)
+    fn decide_play_in_meld(&mut self, _state: &RoundState) -> (Phase, Option<Card>, bool, i32) {
+        (Phase::Discard, None, false, -1)
     }
 
     fn clone_box(&self) -> Box<dyn BotStrategy>;
+
+    fn as_any(&self) -> &dyn Any;
+    fn as_any_mut(&mut self) -> &mut dyn Any;
 }
 
 impl Clone for Box<dyn BotStrategy> {
@@ -104,6 +107,14 @@ impl BotStrategy for RandomBot {
 
     fn clone_box(&self) -> Box<dyn BotStrategy> {
         Box::new(self.clone())
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
     }
 }
 
@@ -204,5 +215,13 @@ impl BotStrategy for RankBot {
 
     fn clone_box(&self) -> Box<dyn BotStrategy> {
         Box::new(self.clone())
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
     }
 }

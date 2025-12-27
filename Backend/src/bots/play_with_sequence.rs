@@ -1,3 +1,5 @@
+use std::any::Any;
+
 use uuid::Uuid;
 
 use crate::bot::{group_by_rank, group_by_suit, BotStrategy, DecideDrawResult};
@@ -91,7 +93,12 @@ impl BotStrategy for SequenceBot {
                 for i in 1..sorted_cards.len() {
                     let card = &sorted_cards[i];
                     let prev_card = &sorted_cards[i - 1];
-                    if !valid_sequence_two_cards(prev_card, card) {
+                    if !valid_sequence_two_cards(
+                        prev_card,
+                        card,
+                        i == 1,
+                        i == sorted_cards.len() - 1,
+                    ) {
                         if meld.len() >= 3 {
                             first_melds.push(Meld {
                                 id: Uuid::new_v4().to_string(),
@@ -133,7 +140,12 @@ impl BotStrategy for SequenceBot {
                 for i in 1..sorted_cards.len() {
                     let card = &sorted_cards[i];
                     let prev_card = &sorted_cards[i - 1];
-                    if !valid_sequence_two_cards(prev_card, card) {
+                    if !valid_sequence_two_cards(
+                        prev_card,
+                        card,
+                        i == 1,
+                        i == sorted_cards.len() - 1,
+                    ) {
                         if meld.len() >= 3 {
                             second_melds.push(Meld {
                                 id: Uuid::new_v4().to_string(),
@@ -198,5 +210,13 @@ impl BotStrategy for SequenceBot {
         } else {
             hand.len() - 1
         }
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
     }
 }
