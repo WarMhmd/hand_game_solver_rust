@@ -1,6 +1,8 @@
 import { useEffect, useRef } from "react";
 import { WebSocketContext } from "./WebSocketContext";
 
+const WS_ENDPOINT = (import.meta.env.VITE_WS_ENDPOINT as string | undefined) ?? "ws://localhost:3000/ws";
+
 export default function WebSocketProvider({
   gameId,
   playerId,
@@ -16,7 +18,7 @@ export default function WebSocketProvider({
     if (!gameId) return;
     if (!playerId) return;
     if (socketRef.current) return;
-    const ws = new WebSocket(`ws://localhost:3000/ws`);
+    const ws = new WebSocket(WS_ENDPOINT);
     socketRef.current = ws;
 
     ws.onmessage = (event) => {

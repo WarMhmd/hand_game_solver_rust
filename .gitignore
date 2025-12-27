@@ -1,2 +1,5 @@
+.env.production
+.env.local
 /target
 /Backend/target
+Backend/src.zip

@@ -41,8 +41,8 @@ export default function MenuPage() {
                 <h2 className="text-sm font-semibold text-gray-200">نصائح سريعة</h2>
                 <ul className="mt-3 space-y-2 text-sm text-gray-300">
                   <li>اسحب البطاقة إلى المحرقة للتخلص منها</li>
-                  <li>حاليا اذا صحبت من المحرقة يجب عليك اللعب بها 😅</li>
-                  <li>ترتيب اليد هو ما يحدد البطاقات المستحدمة لتنزيل المجموع</li>
+                  <li>حاليا اذا سحبت من المحرقة يجب عليك اللعب بها 😅</li>
+                  <li>ترتيب اليد هو ما يحدد البطاقات المستخدمة لتنزيل المجموع</li>
                 </ul>
               </section>
 
