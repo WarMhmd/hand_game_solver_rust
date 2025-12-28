@@ -364,4 +364,135 @@ mod tests {
         let total_value = melds_value(&melds);
         println!("\nTotal meld value: {}", total_value);
     }
+
+    #[test]
+    fn test_get_seq_meld_cards_specific() {
+        // Test get_seq_meld_cards with specific hand
+        let mut bot = UseJokerBot::new("TestBot".to_string());
+
+        let hand = vec![
+            create_card("Clubs-8-1", Suit::Clubs, Rank::Number(8)),
+            create_card("Clubs-9-1", Suit::Clubs, Rank::Number(9)),
+            create_card("Clubs-10-0", Suit::Clubs, Rank::Number(10)),
+            create_card("Clubs-J-1", Suit::Clubs, Rank::Jack),
+            create_card("Joker-0", Suit::Joker, Rank::Joker),
+            create_card("Clubs-9-0", Suit::Clubs, Rank::Number(9)),
+        ];
+
+        println!("\n=== Testing get_seq_meld_cards ===");
+        println!("Input hand:");
+        for card in &hand {
+            println!(
+                "  Card {{ id: \"{}\", suit: {:?}, rank: {:?} }}",
+                card.id, card.suit, card.rank
+            );
+        }
+
+        // take_seq with all cards selected (binary: 111111 = 63)
+        let take_seq: u32 = 0b111111;
+
+        println!("\ntake_seq bits: {:06b}", take_seq);
+
+        let melds = bot.get_seq_meld_cards(&hand, &take_seq);
+
+        println!("\nResult - Melds found: {}", melds.len());
+        for (i, meld) in melds.iter().enumerate() {
+            println!("\nMeld {} ({:?}):", i + 1, meld.meld_type);
+            for card in &meld.cards {
+                println!(
+                    "  Card {{ id: \"{}\", suit: {:?}, rank: {:?} }}",
+                    card.id, card.suit, card.rank
+                );
+            }
+            println!("  Meld value: {}", meld_value(meld));
+        }
+
+        let total_value = melds_value(&melds);
+        println!("\nTotal meld value: {}", total_value);
+    }
+
+    #[test]
+    fn test_get_rank_meld_cards_six_twos() {
+        // Test get_rank_meld_cards with six 2s
+        let mut bot = UseJokerBot::new("TestBot".to_string());
+
+        let hand = vec![
+            create_card("Clubs-2-1", Suit::Clubs, Rank::Number(2)),
+            create_card("Spades-2-1", Suit::Spades, Rank::Number(2)),
+            create_card("Clubs-2-0", Suit::Clubs, Rank::Number(2)),
+            create_card("Spades-2-0", Suit::Spades, Rank::Number(2)),
+            create_card("Diamonds-2-1", Suit::Diamonds, Rank::Number(2)),
+            create_card("Hearts-2-1", Suit::Hearts, Rank::Number(2)),
+        ];
+
+        println!("\n=== Testing get_rank_meld_cards with six 2s ===");
+        println!("Input hand:");
+        for card in &hand {
+            println!(
+                "  Card {{ id: \"{}\", suit: {:?}, rank: {:?} }}",
+                card.id, card.suit, card.rank
+            );
+        }
+
+        let melds = bot.get_rank_meld_cards(&hand);
+
+        println!("\nResult - Melds found: {}", melds.len());
+        for (i, meld) in melds.iter().enumerate() {
+            println!("\nMeld {} ({:?}):", i + 1, meld.meld_type);
+            for card in &meld.cards {
+                println!(
+                    "  Card {{ id: \"{}\", suit: {:?}, rank: {:?} }}",
+                    card.id, card.suit, card.rank
+                );
+            }
+            println!("  Meld value: {}", meld_value(meld));
+        }
+
+        let total_value = melds_value(&melds);
+        println!("\nTotal meld value: {}", total_value);
+    }
+
+    #[test]
+    fn test_get_seq_meld_cards_two_jokers() {
+        // Test get_seq_meld_cards with Diamonds 6-7 and two Jokers
+        let mut bot = UseJokerBot::new("TestBot".to_string());
+
+        let hand = vec![
+            create_card("Diamonds-6-1", Suit::Diamonds, Rank::Number(6)),
+            create_card("Diamonds-7-0", Suit::Diamonds, Rank::Number(7)),
+            create_card("Joker-0", Suit::Joker, Rank::Joker),
+            create_card("Joker-1", Suit::Joker, Rank::Joker),
+        ];
+
+        println!("\n=== Testing get_seq_meld_cards with two Jokers ===");
+        println!("Input hand:");
+        for card in &hand {
+            println!(
+                "  Card {{ id: \"{}\", suit: {:?}, rank: {:?} }}",
+                card.id, card.suit, card.rank
+            );
+        }
+
+        // take_seq with all cards selected (binary: 1111 = 15)
+        let take_seq: u32 = 0b1111;
+
+        println!("\ntake_seq bits: {:04b}", take_seq);
+
+        let melds = bot.get_seq_meld_cards(&hand, &take_seq);
+
+        println!("\nResult - Melds found: {}", melds.len());
+        for (i, meld) in melds.iter().enumerate() {
+            println!("\nMeld {} ({:?}):", i + 1, meld.meld_type);
+            for card in &meld.cards {
+                println!(
+                    "  Card {{ id: \"{}\", suit: {:?}, rank: {:?} }}",
+                    card.id, card.suit, card.rank
+                );
+            }
+            println!("  Meld value: {}", meld_value(meld));
+        }
+
+        let total_value = melds_value(&melds);
+        println!("\nTotal meld value: {}", total_value);
+    }
 }

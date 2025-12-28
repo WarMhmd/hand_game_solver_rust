@@ -49,7 +49,7 @@ pub async fn init_game(State(state): State<Arc<AppState>>) -> Json<GameState> {
         },
     ];
 
-    let game_state = GameState::new(players, 4);
+    let game_state = GameState::new(players, 1000);
     let game_id = game_state.id.clone();
     let result = Json(game_state.clone());
 

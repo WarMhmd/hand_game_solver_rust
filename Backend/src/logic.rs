@@ -720,7 +720,7 @@ pub async fn start_game(
 }
 
 async fn wait_bot() {
-    tokio::time::sleep(Duration::from_millis(10)).await;
+    tokio::time::sleep(Duration::from_millis(500)).await;
 }
 
 pub struct RoundState {

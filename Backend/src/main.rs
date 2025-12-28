@@ -13,7 +13,7 @@ mod bots {
     pub mod use_joker;
 }
 
-use crate::logic::GameState;
+use crate::logic::{start_game, GameState};
 use crate::websocket::websocket_handler;
 use crate::{
     apis::game::{init_game, init_game_with_random_all_bots, init_game_with_random_strong_bots},
