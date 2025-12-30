@@ -176,14 +176,6 @@ impl BotStrategy for UseBetterMeldPlay {
                 return (Phase::Discard, None, false, -1);
             }
         }
-        // if player.hand.len() == 2 {
-        //     println!("all possible plays");
-        //     for play in &possible_plays {
-        //         if let Some(card) = &play.3 {
-        //             println!("Card: {:?} with score {}", card.id.clone(), play.0);
-        //         }
-        //     }
-        // }
         (
             decision.1.clone(),
             decision.3.clone(),
@@ -204,3 +196,8 @@ impl BotStrategy for UseBetterMeldPlay {
         self
     }
 }
+
+// Include test module
+#[cfg(test)]
+#[path = "./better_meld_play_test.rs"]
+mod better_meld_play_test;

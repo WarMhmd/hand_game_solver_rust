@@ -59,14 +59,23 @@ impl UseBetterDiscard {
                 .map(|(_, card)| card.clone())
                 .collect::<Vec<_>>();
 
-            cards.push(fake_joker.clone());
+            // println!("Cards:");
+            // for card in &cards {
+            //     println!("Card: {:?}", card.id.clone());
+            // }
 
-            if use_joker_base.get_rank_meld(&cards, &take_cards, false) != -1 {
+            cards.push(fake_joker.clone());
+            // if cards[0].id == "heart-7" && cards[1].id == "spade-7" {
+            //     println!("{}", use_joker_base.get_rank_meld(&cards, &7, false));
+            // }
+            if use_joker_base.get_rank_meld(&cards, &7, false) != -1 {
                 candidate_cards |= take_cards;
-            } else if use_joker_base.get_seq_meld(&cards, &take_cards, false) != -1 {
+            } else if use_joker_base.get_seq_meld(&cards, &7, false) != -1 {
                 candidate_cards |= take_cards;
             }
         }
+
+        // println!("Candidate Cards: {:15b}", candidate_cards);
 
         for i in 0..hand.len() {
             for j in i + 1..hand.len() {
@@ -83,7 +92,7 @@ impl UseBetterDiscard {
                 }
             }
         }
-        println!("candidate_cards: {}", candidate_cards);
+        println!("candidate_cards: {:15b}", candidate_cards);
         candidate_cards
     }
 }
@@ -120,7 +129,13 @@ impl BotStrategy for UseBetterDiscard {
         let player = &state.players[state.current_player];
         let hand = &player.hand;
         let candidate_card = self.candidate_melds(hand);
-        if candidate_card.count_zeros() == 0 {
+        for (i, card) in hand.iter().enumerate() {
+            if candidate_card & (1 << i) == 0 {
+                println!("Card {:?} is bad", card.id.clone());
+            }
+        }
+        let ans;
+        if candidate_card.count_ones() == hand.len() as u32 {
             if player.melded {
                 // return highest card
                 let max = hand
@@ -133,7 +148,7 @@ impl BotStrategy for UseBetterDiscard {
                         }
                     })
                     .unwrap();
-                return hand.iter().position(|c| c.id == max.id).unwrap();
+                ans = hand.iter().position(|c| c.id == max.id).unwrap();
             } else {
                 let min = hand
                     .iter()
@@ -145,7 +160,8 @@ impl BotStrategy for UseBetterDiscard {
                         }
                     })
                     .unwrap();
-                return hand.iter().position(|c| c.id == min.id).unwrap();
+                println!("{}", card_penality(&min));
+                ans = hand.iter().position(|c| c.id == min.id).unwrap();
             }
         } else {
             if player.melded {
@@ -165,7 +181,7 @@ impl BotStrategy for UseBetterDiscard {
                         }
                     })
                     .unwrap();
-                return hand.iter().position(|c| c.id == max.1.id).unwrap();
+                ans = hand.iter().position(|c| c.id == max.1.id).unwrap();
             } else {
                 let min = hand
                     .iter()
@@ -182,9 +198,12 @@ impl BotStrategy for UseBetterDiscard {
                         }
                     })
                     .unwrap();
-                return hand.iter().position(|c| c.id == min.1.id).unwrap();
+                ans = hand.iter().position(|c| c.id == min.1.id).unwrap();
             }
         }
+        // print the card
+        println!("Discarding card: {:?}", hand[ans]);
+        ans
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -195,3 +214,8 @@ impl BotStrategy for UseBetterDiscard {
         self
     }
 }
+
+// Include test module
+#[cfg(test)]
+#[path = "./better_discard_test.rs"]
+mod better_discard_test;

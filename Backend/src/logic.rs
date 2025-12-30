@@ -732,7 +732,8 @@ pub struct RoundState {
     pub phase: Phase,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Serialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub enum Phase {
     Draw,
     Meld,
