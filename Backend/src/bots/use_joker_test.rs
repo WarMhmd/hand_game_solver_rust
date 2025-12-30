@@ -495,4 +495,79 @@ mod tests {
         let total_value = melds_value(&melds);
         println!("\nTotal meld value: {}", total_value);
     }
+
+    #[test]
+    fn test_decide_melds_fifteen_card_hand() {
+        // Test decide_melds with specific 15-card hand
+        let mut bot = UseJokerBot::new("TestBot".to_string());
+
+        let hand = vec![
+            create_card("heart-A", Suit::Hearts, Rank::Ace),
+            create_card("spade-A", Suit::Spades, Rank::Ace),
+            create_card("club-A", Suit::Clubs, Rank::Ace),
+            create_card("heart-9", Suit::Hearts, Rank::Number(9)),
+            create_card("spade-9", Suit::Spades, Rank::Number(9)),
+            create_card("spade-6", Suit::Spades, Rank::Number(6)),
+            create_card("spade-3", Suit::Spades, Rank::Number(3)),
+            create_card("spade-Q", Suit::Spades, Rank::Queen),
+            create_card("diamond-7", Suit::Diamonds, Rank::Number(7)),
+            create_card("diamond-8", Suit::Diamonds, Rank::Number(8)),
+            create_card("diamond-J", Suit::Diamonds, Rank::Jack),
+            create_card("club-8", Suit::Clubs, Rank::Number(8)),
+            create_card("club-J", Suit::Clubs, Rank::Jack),
+            create_card("club-Q", Suit::Clubs, Rank::Queen),
+            create_card("club-8-dup", Suit::Clubs, Rank::Number(8)),
+        ];
+
+        println!("\n=== Testing decide_melds with 15-card hand ===");
+        println!("Hand cards:");
+        for (i, card) in hand.iter().enumerate() {
+            println!(
+                "  [{}] Card: \"{}-{}\"",
+                i,
+                format!("{:?}", card.suit).to_lowercase(),
+                match card.rank {
+                    Rank::Ace => "A".to_string(),
+                    Rank::King => "K".to_string(),
+                    Rank::Queen => "Q".to_string(),
+                    Rank::Jack => "J".to_string(),
+                    Rank::Number(n) => n.to_string(),
+                    Rank::Joker => "Joker".to_string(),
+                }
+            );
+        }
+
+        let player = create_test_player("P1", hand.clone());
+        let mut state = create_test_round_state_with_player(player);
+        state.players[0].melded = false; // First meld
+
+        let melds = bot.decide_melds(&state);
+
+        println!("\nMelds found: {}", melds.len());
+        for (i, meld) in melds.iter().enumerate() {
+            println!("\nMeld {} ({:?}):", i + 1, meld.meld_type);
+            for card in &meld.cards {
+                println!(
+                    "  {} {}",
+                    match card.rank {
+                        Rank::Ace => "A".to_string(),
+                        Rank::King => "K".to_string(),
+                        Rank::Queen => "Q".to_string(),
+                        Rank::Jack => "J".to_string(),
+                        Rank::Number(n) => n.to_string(),
+                        Rank::Joker => "Joker".to_string(),
+                    },
+                    format!("{:?}", card.suit)
+                );
+            }
+            println!("  Value: {}", meld_value(meld));
+        }
+
+        let total_value = melds_value(&melds);
+        println!("\nTotal meld value: {}", total_value);
+        println!("Meets 51 point requirement: {}", total_value >= 51);
+
+        // Verify the function doesn't panic
+        println!("\n✓ Test completed without panic");
+    }
 }

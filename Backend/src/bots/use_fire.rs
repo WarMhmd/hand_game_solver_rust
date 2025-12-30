@@ -137,42 +137,15 @@ impl BotStrategy for UseFireBot {
                         // println!("rank card used: {}", hand[i].clone().id);
                         rank_cards.push(hand[i].clone());
                     }
-
-                    // if (self.base.best_take_seq & (1 << i)) != 0 {
-                    // println!("seq card used: {}", hand[i].clone().id);
-                    // }
                 }
                 self.base.meld_cards = self.base.get_rank_meld_cards(&rank_cards);
                 let best_take_seq = self.base.best_take_seq;
                 let seq_cards = self.base.get_seq_meld_cards(&hand, &best_take_seq);
                 self.base.meld_cards.extend(seq_cards.clone());
-                // let real_value = melds_value(&self.base.meld_cards);
-
-                // if real_value != self.base.max_value {
-                //     for meld in seq_cards {
-                //         println!("seq meld =================");
-                //         for card in meld.cards {
-                //             println!("seq card used: {}", card.id);
-                //         }
-                //         println!("===============");
-                //     }
-                //     println!("max value: {}", self.base.max_value);
-                //     println!("real value: {}", real_value);
-                // }
             }
 
             if !self.base.is_melded {
                 if self.base.max_value >= 51 {
-                    // println!("{:?}", self.base.max_value);
-                    // for meld in &self.base.meld_cards {
-                    //     println!("{:?} meld =================", meld.meld_type);
-                    //     for card in &meld.cards {
-                    //         println!("card used: {}", card.id);
-                    //     }
-                    //     println!("===============");
-                    // }
-
-                    // println!("{:15b}", self.base.best_take_seq);
                     return DecideDrawResult::Fire;
                 } else {
                     self.base.reset_calc_values();
@@ -181,9 +154,6 @@ impl BotStrategy for UseFireBot {
                 }
             } else {
                 if self.base.max_value > 0 {
-                    println!("I am here!!");
-                    // println!("{:15b}", self.base.best_take_rank);
-                    // println!("{:15b}", self.base.best_take_seq);
                     return DecideDrawResult::Fire;
                 } else {
                     self.base.reset_calc_values();
