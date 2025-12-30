@@ -146,9 +146,10 @@ pub async fn websocket_handler(
     let origin = headers.get("origin").and_then(|v| v.to_str().ok());
 
     // Allow specific origins
-    if matches!(origin, Some("http://localhost:5173")) {
+    if matches!(origin, Some("http://localhost:5173") | Some("https://hand-solver.web.app")) {
         return ws.on_upgrade(|socket| handle_socket(socket, state));
     }
+    println!("❌ WebSocket connection rejected due to invalid origin: {:?}", origin);
 
     StatusCode::FORBIDDEN.into_response()
 }

@@ -211,6 +211,22 @@ export const handMelds = (hand: Card[]): string[] => {
       i = j - 1;
       continue;
     }
+    meldCards.reverse();
+    if (validSequenceMeld(meldCards)) {
+      let j = i + 3;
+      while (j < hand.length) {
+        const nextCard = hand[j];
+        if (validSequenceMeld([nextCard, ...meldCards])) {
+          meldCards.unshift(nextCard);
+          j++;
+        } else {
+          break;
+        }
+      }
+      cardsIds.push(...meldCards.map((c) => c.id));
+      i = j - 1;
+      continue;
+    }
   }
 
   return cardsIds;

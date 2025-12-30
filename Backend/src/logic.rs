@@ -1,5 +1,6 @@
 use crate::{
     bot::{BotStrategy, DecideDrawResult},
+    bots::better_meld_play::UseBetterMeldPlay,
     websocket::{
         send_player_draw_card_and_wait, send_player_draw_phase_and_wait,
         send_player_playing_phase_and_wait, send_players_discarded_card, send_players_sync_melds,
@@ -357,9 +358,11 @@ pub async fn start_game(
                     wait_bot().await;
                     // MELD PHASE
                     if round_state.phase == Phase::Meld {
+                        println!("Bot {} is in meld phase", s.name());
                         let melds = s.decide_melds(&round_state);
 
                         if !melds.is_empty() {
+                            println!("Bot {} decided to meld", s.name());
                             let hand_count = round_state.players[current_player_idx].hand.len();
                             let has_fire_card = round_state.players[current_player_idx]
                                 .fire_card_id
@@ -400,6 +403,13 @@ pub async fn start_game(
                                 }
                                 println!("==================");
                                 round_state.phase = Phase::PlayInMeld;
+                            } else {
+                                // print error
+                                println!(
+                                    "Bot {:?} failed to decide melds with error: {:?}",
+                                    s.name(),
+                                    result.err().unwrap()
+                                );
                             }
                         } else {
                             round_state.phase = Phase::PlayInMeld;
@@ -408,20 +418,27 @@ pub async fn start_game(
 
                     // PLAY IN MELD PHASE
                     if round_state.phase == Phase::PlayInMeld {
-                        let mut play_card = None;
+                        println!("Bot {} is in play in meld phase", s.name());
+                        let mut play_card: Option<Card> = None;
                         let mut play_index = -1;
                         let mut is_left = false;
+                        let mut next_phase = Phase::Discard;
 
                         if s.can_use_features().contains(&"useMeld".to_string()) {
                             let res = s.decide_play_in_meld(&round_state);
-                            play_card = res.0;
-                            is_left = res.1;
-                            play_index = res.2;
+                            next_phase = res.0;
+                            play_card = res.1;
+                            is_left = res.2;
+                            play_index = res.3;
                         }
 
-                        if play_card.is_none() || play_index == -1 {
-                            round_state.phase = Phase::Discard;
-                        } else {
+                        round_state.phase = next_phase;
+                        if play_card.is_some() && play_index != -1 {
+                            println!(
+                                "Bot {} played card {} in meld",
+                                s.name(),
+                                play_card.clone().unwrap().id
+                            );
                             let result = play_in_meld(
                                 &mut round_state,
                                 play_card.clone().unwrap(),
@@ -430,7 +447,7 @@ pub async fn start_game(
                             );
 
                             if result.is_err() {
-                                println!("Error: {}", result.err().unwrap());
+                                println!("Play in meld error: {}", result.err().unwrap());
                                 round_state.phase = Phase::Discard;
                             } else {
                                 match send_players_sync_melds(
@@ -455,11 +472,12 @@ pub async fn start_game(
 
                     // DISCARD PHASE
                     if round_state.phase == Phase::Discard {
+                        println!("Bot {} is in discard phase", s.name());
                         let discard_idx = s.decide_discard(&round_state);
-
+                        println!("Bot {} decided to discard card {}", s.name(), discard_idx);
                         let result = discard_card(&mut round_state, discard_idx);
                         if result.is_err() {
-                            println!("Error: {}", result.err().unwrap());
+                            println!("Discard error: {}", result.err().unwrap());
                         } else {
                             match send_players_discarded_card(
                                 &game_id,
@@ -494,16 +512,11 @@ pub async fn start_game(
                                 if !melds.is_empty() {
                                     let hand_count =
                                         round_state.players[current_player_idx].hand.len();
-                                    let has_fire_card = round_state.players[current_player_idx]
-                                        .fire_card_id
-                                        .is_some();
+
                                     let result = lay_melds(&mut round_state, melds.clone());
                                     let hand_count_after_meld =
                                         round_state.players[current_player_idx].hand.len();
-                                    if hand_count == 15
-                                        && hand_count_after_meld == 1
-                                        && !has_fire_card
-                                    {
+                                    if hand_count == 15 && hand_count_after_meld == 1 {
                                         player_did_a_hand = true;
                                     }
 
@@ -707,7 +720,7 @@ pub async fn start_game(
 }
 
 async fn wait_bot() {
-    tokio::time::sleep(Duration::from_millis(1)).await;
+    tokio::time::sleep(Duration::from_millis(500)).await;
 }
 
 pub struct RoundState {
@@ -874,11 +887,16 @@ pub fn melds_value(melds: &Vec<Meld>) -> i32 {
     melds.iter().map(|m| meld_value(m)).sum()
 }
 
-pub fn valid_sequence_two_cards(left: &Card, right: &Card) -> bool {
+pub fn valid_sequence_two_cards(
+    left: &Card,
+    right: &Card,
+    is_first_card: bool,
+    is_last_card: bool,
+) -> bool {
     if left.rank == Rank::Joker || right.rank == Rank::Joker {
         return true;
     }
-    if left.rank == Rank::Ace && right.rank == Rank::Number(2) {
+    if is_first_card && left.rank == Rank::Ace && right.rank == Rank::Number(2) {
         return true;
     }
     if left.rank == Rank::Number(10) && right.rank == Rank::Jack {
@@ -890,7 +908,7 @@ pub fn valid_sequence_two_cards(left: &Card, right: &Card) -> bool {
     if left.rank == Rank::Queen && right.rank == Rank::King {
         return true;
     }
-    if left.rank == Rank::King && right.rank == Rank::Ace {
+    if is_last_card && left.rank == Rank::King && right.rank == Rank::Ace {
         return true;
     }
 
@@ -898,6 +916,34 @@ pub fn valid_sequence_two_cards(left: &Card, right: &Card) -> bool {
         (Rank::Number(l), Rank::Number(r)) => l + 1 == r,
         _ => false,
     }
+}
+
+pub fn check_seq_melds(meld: &Meld) -> Vec<Meld> {
+    if !valid_sequence_meld(&meld.cards) {
+        return vec![];
+    }
+    if meld.cards.len() >= 6 {
+        let mut melds = Vec::new();
+        for i in (0..meld.cards.len()).step_by(3) {
+            if i + 3 <= meld.cards.len() && i + 6 <= meld.cards.len() {
+                melds.push(Meld {
+                    id: Uuid::new_v4().to_string(),
+                    cards: meld.cards[i..i + 3].to_vec(),
+                    meld_type: MeldType::Sequence,
+                });
+            } else {
+                melds.push(Meld {
+                    id: Uuid::new_v4().to_string(),
+                    cards: meld.cards[i..].to_vec(),
+                    meld_type: MeldType::Sequence,
+                });
+                break;
+            }
+        }
+    } else {
+        return vec![meld.clone()];
+    }
+    return vec![];
 }
 
 pub fn check_melds(state: &mut RoundState) {
@@ -993,7 +1039,7 @@ pub fn valid_sequence_meld(cards: &Vec<Card>) -> bool {
     }
 
     for i in 1..cards.len() {
-        if !valid_sequence_two_cards(&cards[i - 1], &cards[i]) {
+        if !valid_sequence_two_cards(&cards[i - 1], &cards[i], i == 1, i == cards.len() - 1) {
             return false;
         }
         if i == 1 && cards[i - 1].rank == Rank::Joker && cards[i].rank == Rank::Ace {
@@ -1233,7 +1279,12 @@ pub fn lay_melds(state: &mut RoundState, melds: Vec<Meld>) -> Result<(), String>
             if let Some(idx) = player.hand.iter().position(|h| h.id == c.id) {
                 player.hand.remove(idx);
             } else {
-                // panic!("Card not in hand");
+                // print player hand
+                for card in &player.hand {
+                    println!("{:?}", card);
+                }
+                // print card
+                println!("card: {:?}", c);
                 return Err("Card not in hand".to_string());
             }
         }
@@ -1269,7 +1320,7 @@ pub fn play_in_meld(
         let player = &state.players[player_idx];
         if !player.hand.iter().any(|c| c.id == card.id) {
             // panic!("Card not in hand");
-            return Err("Card not in hand".to_string());
+            return Err(format!("Card not in hand {}", card.id));
         }
         if player.hand.len() == 1 {
             // panic!("Cannot play last card in hand");
