@@ -1,7 +1,5 @@
 # Hand Game Solver (Rust + React)
 
-Live site: https://hand-solver.web.app/
-
 A game/hand-solver project with:
 - A Rust backend (Axum) that hosts HTTP APIs + a WebSocket endpoint
 - A React + TypeScript (Vite) frontend that talks to the backend
@@ -15,36 +13,28 @@ A game/hand-solver project with:
 
 ### What it exposes
 
-- HTTP API base: `http://127.0.0.1:3000/api/game`
+- HTTP API base: `http://localhost:3000/api/game`
   - `POST /init_game` → creates a new game and returns the initial `GameState`
-- WebSocket endpoint: `ws://127.0.0.1:3000/ws`
+- WebSocket endpoint: `ws://localhost:3000/ws`
 
 The WebSocket layer uses an acknowledgment system so the server can (optionally) wait for clients to confirm they received certain events before continuing game logic.
 
-### Run locally (Windows / PowerShell)
+### Run locally
 
-```powershell
+```bash
 cd Backend
 cargo run
 ```
 
 You should see logs like:
-- `Backend running on http://localhost:3000`
-- `WebSocket endpoint: ws://localhost:3000/ws`
+- `Backend running on http://0.0.0.0:3000`
+- `WebSocket endpoint: ws://0.0.0.0:3000/ws`
 
 ## Frontend
 
-### Config
+### Run locally
 
-The frontend calls the backend API via:
-
-- `VITE_GAME_API_ENDPOINT` (defaults to `http://localhost:3000/api/game`)
-
-If your backend is not running on `localhost:3000`, set `VITE_GAME_API_ENDPOINT` accordingly.
-
-### Run locally (Windows / PowerShell)
-
-```powershell
+```bash
 cd frontend
 npm install
 npm run dev
@@ -52,27 +42,37 @@ npm run dev
 
 ### Build
 
-```powershell
+```bash
 cd frontend
 npm run build
-npm run preview
 ```
 
-## Quick start (both)
+## Docker Deployment
 
-In two terminals:
+### Using Docker Compose
 
-1) Backend
-```powershell
+```bash
+docker-compose up
+```
+
+This will start:
+- **Backend**: http://localhost:3000
+- **Frontend**: http://localhost:3001
+
+### Individual Services
+
+Backend:
+```bash
 cd Backend
-cargo run
+docker build -t hand-game-backend .
+docker run -p 3000:3000 hand-game-backend
 ```
 
-2) Frontend
-```powershell
+Frontend:
+```bash
 cd frontend
-npm install
-npm run dev
+docker build -t hand-game-frontend .
+docker run -p 3001:3001 hand-game-frontend
 ```
 
 ## Tech stack
@@ -82,5 +82,5 @@ npm run dev
 
 ## Notes
 
-- The backend currently binds to `127.0.0.1:3000` (see `Backend/src/main.rs`).
-- WebSocket message types and the ack/wait architecture are documented in `Backend/src/websocket/README.md`.
+- The backend binds to `0.0.0.0:3000` for Docker compatibility
+- WebSocket message types and the ack/wait architecture are documented in `Backend/src/websocket/README.md`

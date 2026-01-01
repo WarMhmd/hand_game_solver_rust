@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./Backend
+      dockerfile: Dockerfile
+    container_name: hand_game_solver_backend
+    restart: unless-stopped
+    expose:
+      - "3000"
+    labels:
+      - "traefik.http.services.backend.loadbalancer.server.port=3000"
+      - "traefik.http.services.backend.loadbalancer.server.scheme=http"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # frontend:
+  #   build:
+  #     context: ./frontend
+  #     dockerfile: Dockerfile
+  #   container_name: hand_game_solver_frontend
+  #   depends_on:
+  #     backend:
+  #       condition: service_healthy
+  #   restart: unless-stopped
+  #   expose:
+  #     - "3001"
+  #   labels:
+  #     - "traefik.http.services.frontend.loadbalancer.server.port=3001"
+  #   healthcheck:
+  #     test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3001"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
+  #     start_period: 40s

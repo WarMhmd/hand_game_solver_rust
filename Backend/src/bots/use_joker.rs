@@ -591,6 +591,22 @@ impl UseJokerBot {
                             delete_invalid_index.insert(i);
                             valid_meld_seqs.push(vec![joker_card, meld[0], ace_card]);
                             continue;
+                        } else if meld[0].rank == Rank::Number(3)
+                            && !aces_cards.is_empty()
+                            && !joker_cards.is_empty()
+                        {
+                            let joker_card = joker_cards.pop().unwrap();
+                            let ace_card = aces_cards.pop().unwrap();
+                            delete_invalid_index.insert(i);
+                            valid_meld_seqs.push(vec![ace_card, joker_card, meld[0]]);
+                        } else if meld[0].rank == Rank::Queen
+                            && !aces_cards.is_empty()
+                            && !joker_cards.is_empty()
+                        {
+                            let joker_card = joker_cards.pop().unwrap();
+                            let ace_card = aces_cards.pop().unwrap();
+                            delete_invalid_index.insert(i);
+                            valid_meld_seqs.push(vec![meld[0], joker_card, ace_card]);
                         } else {
                             if with_memo {
                                 self.dp_rank_seq[take_seq_index] = -1;
@@ -1339,6 +1355,22 @@ impl UseJokerBot {
                             delete_invalid_index.insert(i);
                             valid_meld_seqs.push(vec![joker_card, meld[0], ace_card]);
                             continue;
+                        } else if meld[0].rank == Rank::Number(3)
+                            && !aces_cards.is_empty()
+                            && !joker_cards.is_empty()
+                        {
+                            let joker_card = joker_cards.pop().unwrap();
+                            let ace_card = aces_cards.pop().unwrap();
+                            delete_invalid_index.insert(i);
+                            valid_meld_seqs.push(vec![ace_card, joker_card, meld[0]]);
+                        } else if meld[0].rank == Rank::Queen
+                            && !aces_cards.is_empty()
+                            && !joker_cards.is_empty()
+                        {
+                            let joker_card = joker_cards.pop().unwrap();
+                            let ace_card = aces_cards.pop().unwrap();
+                            delete_invalid_index.insert(i);
+                            valid_meld_seqs.push(vec![meld[0], joker_card, ace_card]);
                         } else {
                             return vec![];
                         }
@@ -1449,7 +1481,7 @@ impl UseJokerBot {
         all_melds
     }
 
-    fn calc(&mut self, hand: &Vec<Card>) {
+    pub fn calc(&mut self, hand: &Vec<Card>) {
         let n = hand.len() as u32;
         let limit = 1u32 << n;
 

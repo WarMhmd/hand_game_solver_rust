@@ -1,5 +1,7 @@
 use std::any::Any;
 
+use futures::future::OptionFuture;
+
 use crate::bot::{BotStrategy, DecideDrawResult};
 use crate::bots::use_fire::UseFireBot;
 use crate::logic::{
@@ -54,24 +56,35 @@ impl BotStrategy for UseBetterMeldPlay {
         if player.hand.len() == 1 {
             return (Phase::Discard, None, false, -1);
         }
-        let mut possible_plays: Vec<(i32, Phase, i32, Option<Card>, bool)> =
-            vec![(0, Phase::Discard, -1, None, false)];
-        for card in &player.hand {
-            if card.rank == Rank::Joker && !(2..=3).contains(&player.hand.len()) {
+        let mut possible_plays: Vec<(Phase, i32, Option<Card>, bool)> = vec![];
+        let mut table_melds: Vec<Meld> = state.table_melds.clone();
+        let mut hand = player.hand.clone();
+        let mut skipped_hand = Vec::new();
+        let mut changed = false;
+        while hand.len() > 0 || changed {
+            if hand.len() == 0 {
+                if skipped_hand.len() == 0 {
+                    break;
+                }
+                hand = skipped_hand;
+                skipped_hand = Vec::new();
+                changed = false;
+            }
+            let card = hand.pop().unwrap();
+            if card.rank == Rank::Joker && !((2..=3).contains(&player.hand.len())) {
+                skipped_hand.push(card);
                 continue;
             }
-            for (index, meld) in state.table_melds.iter().enumerate() {
+            let mut max_score = 0;
+            let mut best_possible_play: Option<(Phase, i32, Option<Card>, bool)> = None;
+            for (index, meld) in table_melds.iter().enumerate() {
                 if meld.meld_type == MeldType::Sequence {
                     let (success, play_left, take_joker) =
-                        can_play_in_sequence_meld(meld, card, true);
+                        can_play_in_sequence_meld(meld, &card, true);
                     if success && take_joker {
-                        possible_plays.push((
-                            1000,
-                            Phase::Meld,
-                            index as i32,
-                            Some(card.clone()),
-                            play_left,
-                        ));
+                        max_score = 1000;
+                        best_possible_play =
+                            Some((Phase::Meld, index as i32, Some(card.clone()), play_left));
                         break;
                     }
 
@@ -84,10 +97,7 @@ impl BotStrategy for UseBetterMeldPlay {
                         }
                         let mut melds_after = check_seq_melds(&new_meld);
                         let mut score = 1;
-                        for card_after in &player.hand {
-                            if card_after.id == card.id {
-                                continue;
-                            }
+                        for card_after in &hand {
                             if card_after.rank == Rank::Joker {
                                 continue;
                             }
@@ -112,25 +122,23 @@ impl BotStrategy for UseBetterMeldPlay {
                                 }
                             }
                         }
-                        possible_plays.push((
-                            score,
-                            Phase::PlayInMeld,
-                            index as i32,
-                            Some(card.clone()),
-                            play_left,
-                        ));
+                        if score > max_score {
+                            max_score = score;
+                            best_possible_play = Some((
+                                Phase::PlayInMeld,
+                                index as i32,
+                                Some(card.clone()),
+                                play_left,
+                            ));
+                        }
                     }
                 }
                 if meld.meld_type == MeldType::Rank {
-                    let (success, take_joker) = can_play_in_rank_meld(meld, card);
+                    let (success, take_joker) = can_play_in_rank_meld(meld, &card);
                     if success && take_joker {
-                        possible_plays.push((
-                            1000,
-                            Phase::Meld,
-                            index as i32,
-                            Some(card.clone()),
-                            false,
-                        ));
+                        max_score = 1000;
+                        best_possible_play =
+                            Some((Phase::Meld, index as i32, Some(card.clone()), false));
                         break;
                     }
 
@@ -151,45 +159,68 @@ impl BotStrategy for UseBetterMeldPlay {
                                 }
                             }
                         }
-                        possible_plays.push((
-                            score,
-                            Phase::PlayInMeld,
-                            index as i32,
-                            Some(card.clone()),
-                            false,
-                        ));
+                        if max_score < score {
+                            max_score = score;
+                            best_possible_play =
+                                Some((Phase::PlayInMeld, index as i32, Some(card.clone()), false));
+                        }
                     }
                 }
             }
+
+            if max_score == 0 {
+                skipped_hand.push(card);
+            } else {
+                changed = true;
+                let best_possible_play = best_possible_play.unwrap();
+                let meld: &Meld = &table_melds[best_possible_play.1 as usize];
+                if meld.meld_type == MeldType::Rank {
+                    table_melds[best_possible_play.1 as usize].cards.push(card);
+                } else if meld.meld_type == MeldType::Sequence {
+                    if best_possible_play.3 {
+                        table_melds[best_possible_play.1 as usize]
+                            .cards
+                            .insert(0, card.clone());
+                    } else {
+                        table_melds[best_possible_play.1 as usize]
+                            .cards
+                            .push(card.clone());
+                    }
+                    let melds_after = check_seq_melds(&table_melds[best_possible_play.1 as usize]);
+                    if melds_after.len() > 1 {
+                        table_melds.remove(best_possible_play.1 as usize);
+                        table_melds.extend(melds_after);
+                    }
+                }
+                if max_score >= 900 {
+                    // we took a joker
+                    possible_plays.insert(0, best_possible_play);
+                    break;
+                } else {
+                    possible_plays.push(best_possible_play);
+                }
+            }
         }
-        possible_plays.sort_by_key(|f| -f.0);
-        let decision = &possible_plays[0];
-        if decision.0 == 1000 {
-            self.base.is_fire_card = false;
-        }
-        if decision.0 != 1000 || decision.0 != 901 {
-            // the card is not joker
-            if player.hand.len() == 4 && decision.0 == 1 {
+
+        if player.hand.len() - possible_plays.len() > 2 {
+            if player.hand.len() == 4 as usize
+                && (possible_plays.len() == 0 || possible_plays[0].0 != Phase::Meld)
+            {
                 return (Phase::Discard, None, false, -1);
             }
-            if player.hand.len() == 5 && decision.0 == 2 {
-                return (Phase::Discard, None, false, -1);
-            }
         }
-        // if player.hand.len() == 2 {
-        //     println!("all possible plays");
-        //     for play in &possible_plays {
-        //         if let Some(card) = &play.3 {
-        //             println!("Card: {:?} with score {}", card.id.clone(), play.0);
-        //         }
-        //     }
-        // }
-        (
-            decision.1.clone(),
-            decision.3.clone(),
-            decision.4,
-            decision.2,
-        )
+
+        if possible_plays.len() == 0 {
+            return (Phase::Discard, None, false, -1);
+        } else {
+            let decision = &possible_plays[0];
+            (
+                decision.0.clone(),
+                decision.2.clone(),
+                decision.3,
+                decision.1,
+            )
+        }
     }
 
     fn decide_discard(&mut self, state: &RoundState) -> usize {
@@ -204,3 +235,8 @@ impl BotStrategy for UseBetterMeldPlay {
         self
     }
 }
+
+// Include test module
+#[cfg(test)]
+#[path = "./better_meld_play_test.rs"]
+mod better_meld_play_test;
