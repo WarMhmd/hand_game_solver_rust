@@ -20,8 +20,9 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-# Install serve to host the static files
-RUN npm install -g serve
+# Install serve to host the static files and wget for health checks
+RUN npm install -g serve && \
+    apk add --no-cache wget
 
 # Copy built assets from builder
 COPY --from=builder /app/dist ./dist
