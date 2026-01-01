@@ -7,7 +7,7 @@ services:
       dockerfile: Dockerfile
     container_name: hand_game_solver_backend
     ports:
-      - "3000:3000"
+      - "3000:80"
     networks:
       - app-network
     restart: unless-stopped
@@ -18,7 +18,7 @@ services:
       dockerfile: Dockerfile
     container_name: hand_game_solver_frontend
     ports:
-      - "3001:3001"
+      - "3001:80"
     depends_on:
       - backend
     networks:

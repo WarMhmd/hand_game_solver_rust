@@ -145,11 +145,28 @@ pub async fn websocket_handler(
 ) -> impl IntoResponse {
     let origin = headers.get("origin").and_then(|v| v.to_str().ok());
 
-    // Allow specific origins
-    if matches!(origin, Some("http://localhost:5173") | Some("https://hand-solver.web.app")) {
+    // Check if origin is allowed
+    let is_allowed = match origin {
+        Some(orig) => {
+            // Allow localhost
+            orig.starts_with("http://localhost")
+            || orig.starts_with("https://localhost")
+            // Allow warmhmd.online and its subdomains
+            || orig.ends_with(".warmhmd.online")
+            || orig == "http://warmhmd.online"
+            || orig == "https://warmhmd.online"
+        }
+        None => false,
+    };
+
+    if is_allowed {
         return ws.on_upgrade(|socket| handle_socket(socket, state));
     }
-    println!("❌ WebSocket connection rejected due to invalid origin: {:?}", origin);
+
+    println!(
+        "❌ WebSocket connection rejected due to invalid origin: {:?}",
+        origin
+    );
 
     StatusCode::FORBIDDEN.into_response()
 }
