@@ -1,38 +1,37 @@
-# Stage 1: Builder (with dependency caching)
+
+# Stage 1: Chef (Prepare dependencies)
+# We use a trick to cache dependencies.
 FROM rust:1.92-slim-bookworm as builder
 
 WORKDIR /app
 
-# 1. Create a dummy project to build dependencies
+# 1. Create a dummy project shell to build dependencies
 RUN USER=root cargo new --bin hand_game_solver_rust
 WORKDIR /app/hand_game_solver_rust
 
-# 2. Copy only dependency manifests first (for better caching)
-# This layer will be cached unless Cargo.toml or Cargo.lock changes
+# 2. Copy manifests only
 COPY Cargo.toml Cargo.lock ./
 
-# 3. Build dependencies only (this layer will be cached if Cargo files don't change)
-# The target directory will persist in the layer, so dependencies won't rebuild
-RUN cargo build --release && \
-    rm src/*.rs
+# 3. Build only the dependencies (this layer will be cached!)
+RUN cargo build --release
+RUN rm src/*.rs
 
-# 4. Copy actual source code
-# This layer only invalidates if source files change
+# 4. Now copy your actual source code
 COPY src ./src
 
-# 5. Build the actual application (only rebuilds if source changed)
-# Dependencies are already compiled, so this is fast
-# Cargo will automatically detect source file changes via COPY
+# 5. Build for release (only compiles your code, linking against cached deps)
+# We touch the main file to force a re-compile of the binary itself
+RUN touch src/main.rs
 RUN cargo build --release
 
 # Stage 2: Runtime
 FROM debian:bookworm-slim
 
-# Install OpenSSL, CA certificates, and curl for health checks
+# Install OpenSSL and CA certificates
 RUN apt-get update && apt-get install -y \
     ca-certificates \
-    libssl3 \
     curl \
+    libssl3 \
     && rm -rf /var/lib/apt/lists/*
 
 # Create a non-root user for security
