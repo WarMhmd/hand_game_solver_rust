@@ -1,6 +1,6 @@
 # Stage 1: Chef (Prepare dependencies)
 # We use a trick to cache dependencies.
-FROM rust:1.83-slim-bookworm as builder
+FROM rust:1.92-slim-bookworm as builder
 
 WORKDIR /app
 
