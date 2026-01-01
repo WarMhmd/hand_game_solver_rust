@@ -8,8 +8,8 @@ services:
     networks:
       - app-network
     restart: unless-stopped
-    expose:
-      - "3000"
+    ports:
+      - "3000:3000"
 
   frontend:
     build:
@@ -21,8 +21,8 @@ services:
     networks:
       - app-network
     restart: unless-stopped
-    expose:
-      - "3001"
+    ports:
+      - "3001:3001"
 
 networks:
   app-network:
