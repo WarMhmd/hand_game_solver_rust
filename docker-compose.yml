@@ -9,13 +9,6 @@ services:
     restart: unless-stopped
     expose:
       - "3000"
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.backend.rule=Host(`hand-solver.warmhmd.online`)"
-      - "traefik.http.routers.backend.entrypoints=web,websecure"
-      - "traefik.http.routers.backend.tls=true"
-      - "traefik.http.routers.backend.tls.certresolver=letsencrypt"
-      - "traefik.http.services.backend.loadbalancer.server.port=3000"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
       interval: 30s
@@ -34,13 +27,6 @@ services:
     restart: unless-stopped
     expose:
       - "3001"
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.frontend.rule=Host(`hand.warmhmd.online`)"
-      - "traefik.http.routers.frontend.entrypoints=web,websecure"
-      - "traefik.http.routers.frontend.tls=true"
-      - "traefik.http.routers.frontend.tls.certresolver=letsencrypt"
-      - "traefik.http.services.frontend.loadbalancer.server.port=3001"
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3001"]
       interval: 30s
