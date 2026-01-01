@@ -69,9 +69,17 @@ async fn main() {
 
     let cors = CorsLayer::new()
         .allow_origin(AllowOrigin::list(allowed_origins))
-        .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
-        .allow_headers([http::header::CONTENT_TYPE])
-        .allow_credentials(true);
+        .allow_methods([Method::GET, Method::POST, Method::OPTIONS, Method::PUT, Method::DELETE, Method::PATCH])
+        .allow_headers([
+            http::header::CONTENT_TYPE,
+            http::header::AUTHORIZATION,
+            http::header::ACCEPT,
+        ])
+        .allow_credentials(true)
+        .expose_headers([
+            http::header::CONTENT_TYPE,
+            http::header::CONTENT_LENGTH,
+        ]);
 
     async fn health_check() -> &'static str {
         "OK"
@@ -89,7 +97,7 @@ async fn main() {
         .route("/api/v1/bot/meld-cards", post(meld_cards))
         .route("/api/v1/bot/play-in-melds", post(play_in_melds))
         .route("/api/v1/bot/discard", post(discard))
-        .route("/api/v1/bot/init_game", post(init_game))
+        .route("/api/game/init_game", post(init_game))
         .route(
             "/api/game/init_game_with_random_strong_bots",
             post(init_game_with_random_strong_bots),
@@ -97,14 +105,15 @@ async fn main() {
         .route(
             "/api/game/init_game_with_random_all_bots",
             post(init_game_with_random_all_bots),
-        )
-        .layer(cors);
+        );
 
     let ws = Router::new().route("/ws", get(websocket_handler));
 
+    // Apply CORS to the entire app, not just the API router
     let app = Router::new()
         .merge(api)
         .merge(ws)
+        .layer(cors)
         .with_state(Arc::new(state));
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
