@@ -28,7 +28,7 @@ use axum::{
     routing::{get, post},
     Router,
 };
-use tower_http::cors::CorsLayer;
+use tower_http::cors::{AllowOrigin, CorsLayer};
 
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::{oneshot, Mutex, RwLock};
@@ -61,15 +61,24 @@ async fn main() {
         ack_trackers: Arc::new(RwLock::new(HashMap::new())),
     };
 
+    let allowed_origins_str = "https://www.jawaker.com,https://cdn.jawaker.com,https://hand.warmhmd.online";
+    let allowed_origins: Vec<HeaderValue> = allowed_origins_str
+        .split(',')
+        .map(|s| HeaderValue::from_str(s.trim()).unwrap())
+        .collect();
+
     let cors = CorsLayer::new()
-        .allow_origin([
-            HeaderValue::from_static("https://www.jawaker.com"),
-            HeaderValue::from_static("https://cdn.jawaker.com"),
-        ])
+        .allow_origin(AllowOrigin::list(allowed_origins))
         .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
-        .allow_headers([http::header::CONTENT_TYPE]);
+        .allow_headers([http::header::CONTENT_TYPE])
+        .allow_credentials(true);
+
+    async fn health_check() -> &'static str {
+        "OK"
+    }
 
     let api = Router::new()
+        .route("/health", get(health_check))
         .route("/api/v1/bot/init-bot", post(init_bot))
         .route("/api/v1/bot/draw-card", post(draw_card))
         .route("/api/v1/bot/meld-cards", post(meld_cards))
