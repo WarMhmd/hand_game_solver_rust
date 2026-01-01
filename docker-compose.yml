@@ -7,8 +7,9 @@ services:
       dockerfile: Dockerfile
     container_name: hand_game_solver_backend
     restart: unless-stopped
-    expose:
-      - "3000"
+    # Use ports mapping so Coolify's Traefik can reach the service
+    ports:
+      - "3000:3000"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
       interval: 30s
@@ -25,8 +26,9 @@ services:
       backend:
         condition: service_healthy
     restart: unless-stopped
-    expose:
-      - "3001"
+    # Use ports mapping so Coolify's Traefik can reach the service
+    ports:
+      - "3001:3001"
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3001"]
       interval: 30s

@@ -77,7 +77,12 @@ async fn main() {
         "OK"
     }
 
+    async fn root() -> &'static str {
+        "Backend is running"
+    }
+
     let api = Router::new()
+        .route("/", get(root))
         .route("/health", get(health_check))
         .route("/api/v1/bot/init-bot", post(init_bot))
         .route("/api/v1/bot/draw-card", post(draw_card))
