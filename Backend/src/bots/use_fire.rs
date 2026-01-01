@@ -121,7 +121,6 @@ impl BotStrategy for UseFireBot {
     fn decide_draw(&mut self, state: &RoundState) -> DecideDrawResult {
         if state.fire_pile.len() > 0 {
             let fire_card = state.fire_pile.last().unwrap().clone();
-            // println!("Deciding to draw card: {}", fire_card.clone().id);
             // emulate fireCard Draw
             let mut hand: Vec<Card> = state.players[state.current_player].hand.clone();
             hand.push(fire_card);
@@ -221,3 +220,8 @@ impl BotStrategy for UseFireBot {
         self
     }
 }
+
+// Include test module
+#[cfg(test)]
+#[path = "./use_fire_test.rs"]
+mod use_fire_test;

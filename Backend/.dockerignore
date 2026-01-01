@@ -1,0 +1,55 @@
+# Rust build artifacts
+target/
+**/*.rs.bk
+*.pdb
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Documentation
+*.md
+!ACKNOWLEDGMENT_EXAMPLE.md
+!QUICK_START_ACKS.md
+ACKNOWLEDGMENT_EXAMPLE.md
+QUICK_START_ACKS.md
+README.md
+
+# Archives
+*.zip
+*.tar.gz
+*.rar
+
+# Logs
+*.log
+
+# OS files
+Thumbs.db
+desktop.ini
+
+# Development files
+.env
+.env.local
+.env.*.local
+
+# Test files
+**/*_test.rs
+tests/
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+azure-pipelines.yml
+
+# Docker
+Dockerfile
+.dockerignore

@@ -43,8 +43,14 @@ pub async fn draw_card(
     State(state): State<Arc<AppState>>,
     Json(data): Json<DrawCardData>,
 ) -> Json<DrawCardResponse> {
+    println!("Draw card");
+    println!("Hand: ");
+    for card in &data.cards {
+        println!("{:?}", card);
+    }
+    println!("Fire card: {:?}", data.fire_card);
+
     // print all cards for draw
-    println!("Fire Card: {:?}", data.fire_card);
     let round_state = RoundState {
         current_player: 0,
         table_melds: Vec::new(),
@@ -56,12 +62,12 @@ pub async fn draw_card(
         deck: vec![],
         phase: Phase::Draw,
         players: vec![ActivePlayer {
-            hand: data.cards,
+            hand: data.cards.clone(),
             bot_strategy: None,
             did_join: true,
             fire_card_id: None,
             id: "".into(),
-            melded: false,
+            melded: data.cards.len() < 14,
             name: "Player 1".into(),
             score: 0,
             sender: None,
@@ -72,6 +78,8 @@ pub async fn draw_card(
 
     let result = {
         let mut bot = bot_arc.lock().await;
+        let use_joker_base = &mut bot.base.base.base;
+        use_joker_base.is_melded = data.cards.len() < 14;
         bot.decide_draw(&round_state)
     };
 
@@ -85,7 +93,6 @@ pub async fn draw_card(
 pub struct MeldsData {
     bot_id: String,
     cards: Vec<Card>,
-    melded: bool,
 }
 
 #[derive(Serialize)]
@@ -98,11 +105,11 @@ pub async fn meld_cards(
     State(state): State<Arc<AppState>>,
     Json(data): Json<MeldsData>,
 ) -> Json<MeldsResponse> {
-    // print incoming cards
+    println!("Melding: ");
+    println!("Hand: ");
     for card in &data.cards {
-        println!("Card: {:?}", card.id.clone());
+        println!("{:?}", card);
     }
-    println!("meld_cards --> melded: {:?}", data.melded);
 
     let round_state = RoundState {
         current_player: 0,
@@ -111,12 +118,12 @@ pub async fn meld_cards(
         deck: vec![],
         phase: Phase::Meld,
         players: vec![ActivePlayer {
-            hand: data.cards,
+            hand: data.cards.clone(),
             bot_strategy: None,
             did_join: true,
             fire_card_id: None,
             id: "".into(),
-            melded: data.melded,
+            melded: data.cards.len() < 14,
             name: "Player 1".into(),
             score: 0,
             sender: None,
@@ -127,11 +134,21 @@ pub async fn meld_cards(
 
     let result: Vec<Vec<Card>> = {
         let mut bot = bot_arc.lock().await;
+        let use_joker_base = &mut bot.base.base.base;
+        use_joker_base.is_melded = data.cards.len() < 14;
         bot.decide_melds(&round_state)
             .iter()
             .map(|melds| melds.cards.clone())
             .collect()
     };
+
+    println!("Melding results:");
+    for meld in &result {
+        println!("Meld: ");
+        for card in meld {
+            println!("{:?}", card);
+        }
+    }
 
     let response = MeldsResponse { melds: result };
 
@@ -143,7 +160,6 @@ pub async fn meld_cards(
 pub struct PlayInMeldsData {
     bot_id: String,
     cards: Vec<Card>,
-    melded: bool,
     table_cards: Vec<Vec<Card>>,
 }
 
@@ -161,7 +177,18 @@ pub async fn play_in_melds(
     State(state): State<Arc<AppState>>,
     Json(data): Json<PlayInMeldsData>,
 ) -> Json<PlayInMeldsResponse> {
-    // print incoming cards
+    println!("Play in melds");
+    println!("Hand: ");
+    for card in &data.cards {
+        println!("{:?}", card);
+    }
+    println!("Table Cards: ");
+    for cards in &data.table_cards {
+        println!("Cards: ");
+        for card in cards {
+            println!("{:?}", card);
+        }
+    }
 
     let round_state = RoundState {
         current_player: 0,
@@ -189,12 +216,12 @@ pub async fn play_in_melds(
         deck: vec![],
         phase: Phase::PlayInMeld,
         players: vec![ActivePlayer {
-            hand: data.cards,
+            hand: data.cards.clone(),
             bot_strategy: None,
             did_join: true,
             fire_card_id: None,
             id: "".into(),
-            melded: data.melded,
+            melded: data.cards.len() < 14,
             name: "Player 1".into(),
             score: 0,
             sender: None,
@@ -205,6 +232,8 @@ pub async fn play_in_melds(
 
     let result = {
         let mut bot = bot_arc.lock().await;
+        let use_joker_base = &mut bot.base.base.base;
+        use_joker_base.is_melded = data.cards.len() < 14;
         bot.decide_play_in_meld(&round_state)
     };
 
@@ -228,7 +257,6 @@ pub async fn play_in_melds(
 pub struct DiscardData {
     bot_id: String,
     cards: Vec<Card>,
-    melded: bool,
 }
 
 #[derive(Serialize)]
@@ -254,12 +282,12 @@ pub async fn discard(
         deck: vec![],
         phase: Phase::Discard,
         players: vec![ActivePlayer {
-            hand: data.cards,
+            hand: data.cards.clone(),
             bot_strategy: None,
             did_join: true,
             fire_card_id: None,
             id: "".into(),
-            melded: data.melded,
+            melded: data.cards.len() < 14,
             name: "Player 1".into(),
             score: 0,
             sender: None,
@@ -270,6 +298,8 @@ pub async fn discard(
 
     let result = {
         let mut bot = bot_arc.lock().await;
+        let use_joker_base = &mut bot.base.base.base;
+        use_joker_base.is_melded = data.cards.len() < 14;
         bot.decide_discard(&round_state)
     };
 

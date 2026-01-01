@@ -93,11 +93,9 @@ async fn main() {
         .merge(ws)
         .with_state(Arc::new(state));
 
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:3000")
-        .await
-        .unwrap();
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
 
-    println!("🚀 Backend running on http://localhost:3000");
-    println!("🔌 WebSocket endpoint: ws://localhost:3000/ws");
+    println!("🚀 Backend running on http://0.0.0.0:3000");
+    println!("🔌 WebSocket endpoint: ws://0.0.0.0:3000/ws");
     axum::serve(listener, app).await.unwrap();
 }
