@@ -1,9 +1,10 @@
 use std::any::Any;
 
+use crate::apis::bot::MeldsData;
 use crate::bot::{BotStrategy, DecideDrawResult};
 use crate::bots::better_meld_play::UseBetterMeldPlay;
 use crate::logic::{
-    can_play_in_rank_meld, can_play_in_sequence_meld, card_penality, check_seq_melds, melds_value,
+    can_play_in_rank_meld, can_play_in_sequence_meld, card_penality, melds_value, ActivePlayer,
     Card, Meld, MeldType, Phase, Rank, RoundState, Suit,
 };
 
@@ -52,7 +53,7 @@ impl UseBetterDiscard {
                 continue;
             }
 
-            let mut cards = hand
+            let mut cards: Vec<Card> = hand
                 .iter()
                 .enumerate()
                 .filter(|(index, card)| {
@@ -89,6 +90,10 @@ impl UseBetterDiscard {
                     continue;
                 }
                 if hand[i].suit == hand[j].suit && hand[i].rank == hand[j].rank {
+                    if hand[i].rank == Rank::Joker {
+                        // Joker can be used as a wildcard
+                        continue;
+                    }
                     if mask & (1 << i) == 0 || mask & (1 << j) == 0 {
                         // At least one of i and j is not in the mask
                         // remove one of them
@@ -101,119 +106,194 @@ impl UseBetterDiscard {
         candidate_cards
     }
 
-    // pub fn discard_card_fn(&mut self, hand: &Vec<Card>, candidate_cards: u32) -> usize {
-    //     if hand.len() <= 3 {
-    //         // return card index with the highest penalty
-    //         let mut max_penalty = 0;
-    //         let mut max_index = 0;
-    //         for i in 0..hand.len() {
-    //             let penalty = card_penality(&hand[i]);
-    //             if penalty > max_penalty {
-    //                 max_penalty = penalty;
-    //                 max_index = i;
-    //             }
-    //         }
-    //         return max_index;
-    //     }
-    //     // (Score, index)
-    //     let mut discard_card: Vec<(i32, usize)> = Vec::new();
-    //     let use_joker_base = &mut self.base.base.base;
-    //     let mut mask = 0;
-    //     let melds_cards = use_joker_base.meld_cards.clone();
-    //     let melds_score = melds_value(&melds_cards);
-    //     for meld in &melds_cards {
-    //         for card in &meld.cards {
-    //             let position = hand.iter().position(|c| c.id == card.id);
-    //             if let Some(position) = position {
-    //                 mask |= 1 << position;
-    //             }
-    //         }
-    //     }
-    //     for i in 0..hand.len() {
-    //         if candidate_cards & (1 << i) == 0 {
-    //             // not a candidate card
-    //             discard_card.push((1000, i));
-    //             continue;
-    //         }
-    //         if hand[i].rank == Rank::Joker {
-    //             continue;
-    //         }
-    //         let new_candidate_cards = 0;
-    //         for j in 0..hand.len() {
-    //             if i == j {
-    //                 continue;
-    //             }
-    //             if candidate_cards & (1 << j) == 0 {
-    //                 // not a candidate card
-    //                 continue;
-    //             }
-    //             if hand[j].rank == Rank::Joker {
-    //                 new_candidate_cards |= 1 << j;
-    //                 continue;
-    //             }
-    //             for k in j + 1..hand.len() {
-    //                 if k == i || k == j {
-    //                     continue;
-    //                 }
-    //                 if candidate_cards & (1 << k) == 0 {
-    //                     // not a candidate card
-    //                     continue;
-    //                 }
-    //                 if hand[k].rank == Rank::Joker {
-    //                     new_candidate_cards |= 1 << k;
-    //                     continue;
-    //                 }
+    pub fn get_joker_card(&mut self, card: &Card, table_melds: &Vec<Meld>) -> bool {
+        for meld in table_melds {
+            if meld.meld_type == MeldType::Sequence {
+                let (_, _, take_joker) = can_play_in_sequence_meld(meld, card, false);
+                if take_joker {
+                    return take_joker;
+                }
+            }
 
-    //                 let mut cards = hand
-    //                     .iter()
-    //                     .enumerate()
-    //                     .filter(|(index, _)| index == j || index == k)
-    //                     .map(|(_, card)| card.clone())
-    //                     .collect::<Vec<_>>();
+            if meld.meld_type == MeldType::Rank {
+                let (_, take_joker) = can_play_in_rank_meld(meld, card);
+                if take_joker {
+                    return take_joker;
+                }
+            }
+        }
+        false
+    }
 
-    //                 cards.push(fake_joker.clone());
+    pub fn evaluate_discard_option(
+        &mut self,
+        hand: &Vec<Card>,
+        candidate_cards: u32,
+        melded: bool,
+        table_melds: &Vec<Meld>,
+    ) -> usize {
+        let mut max_penalty = if melded { 0 } else { i32::MAX };
+        let mut max_index = 0;
+        for i in 0..hand.len() {
+            let penalty = card_penality(&hand[i]);
+            if melded && penalty > max_penalty && hand[i].rank != Rank::Joker {
+                max_penalty = penalty;
+                max_index = i;
+            } else if !melded && penalty < max_penalty && hand[i].rank != Rank::Joker {
+                max_penalty = penalty;
+                max_index = i;
+            }
+        }
+        let mut discard_card: Vec<(i32, usize)> = vec![(0, max_index)];
+        if hand.len() <= 3 {
+            return discard_card[0].1;
+        }
+        // (Score, index)
+        let use_joker_base = &mut self.base.base.base;
+        let mut mask = 0;
+        let melds_cards = use_joker_base.meld_cards.clone();
+        let melds_score = melds_value(&melds_cards);
+        for meld in &melds_cards {
+            for card in &meld.cards {
+                let position = hand.iter().position(|c| c.id == card.id);
+                if let Some(position) = position {
+                    mask |= 1 << position;
+                }
+            }
+        }
+        for i in 0..hand.len() {
+            let card_cost = if !melded {
+                16 - card_penality(&hand[i])
+            } else {
+                card_penality(&hand[i])
+            };
+            if candidate_cards & (1 << i) == 0 {
+                // not a candidate card
+                // check if it's a duplicate
+                let is_duplicate = hand
+                    .iter()
+                    .filter(|&c| c.rank == hand[i].rank && c.suit == hand[i].suit)
+                    .count()
+                    > 1;
 
-    //                 if use_joker_base.get_rank_meld(&cards, &7, false) != -1 {
-    //                     candidate_cards |= 1 << j;
-    //                     candidate_cards |= 1 << k;
-    //                 } else if use_joker_base.get_seq_meld(&cards, &7, false) != -1 {
-    //                     candidate_cards |= 1 << j;
-    //                     candidate_cards |= 1 << k;
-    //                 }
-    //             }
-    //         }
-    //         let diff = candidate_cards ^ new_candidate_cards;
-    //         if mask & (1 << i) != 0 {
-    //             // get new cards
-    //             let new_cards = hand
-    //                 .iter()
-    //                 .enumerate()
-    //                 .filter(|(index, _)| new_candidate_cards & (1 << index) != 0)
-    //                 .map(|(_, card)| card.clone())
-    //                 .collect::<Vec<_>>();
-    //             use_joker_base.reset_calc_values();
-    //             use_joker_base.calc(&new_cards);
+                if is_duplicate {
+                    // Duplicate card has the biggest priority
+                    discard_card.push((1000000 * card_cost, i));
+                    continue;
+                } else {
+                    // println!("Non used card {:?}:", hand[i]);
+                    if !melded && card_cost > 6 {
+                        // Non duplicate card & not candidate card has the third priority
+                        discard_card.push((10000 * card_cost, i));
+                    } else {
+                        // Non duplicate card & candidate card has the second priority
+                        discard_card.push((100000 * card_cost, i));
+                    }
+                    continue;
+                }
+            }
+            if hand[i].rank == Rank::Joker {
+                continue;
+            }
+            let mut new_candidate_cards = 0;
+            let fake_joker = Card {
+                id: "fake_joker".to_string(),
+                suit: Suit::Joker,
+                rank: Rank::Joker,
+            };
+            for j in 0..hand.len() {
+                if i == j {
+                    continue;
+                }
+                if candidate_cards & (1 << j) == 0 {
+                    // not a candidate card
+                    continue;
+                }
+                if hand[j].rank == Rank::Joker {
+                    new_candidate_cards |= 1 << j;
+                    continue;
+                }
+                for k in j + 1..hand.len() {
+                    if k == i || k == j {
+                        continue;
+                    }
+                    if candidate_cards & (1 << k) == 0 {
+                        // not a candidate card
+                        continue;
+                    }
+                    if hand[k].rank == Rank::Joker {
+                        new_candidate_cards |= 1 << k;
+                        continue;
+                    }
 
-    //             let mut rank_cards = Vec::new();
-    //             for i in 0..hand.len() {
-    //                 if (use_joker_base.best_take_rank & (1 << i)) != 0 {
-    //                     rank_cards.push(hand[i].clone());
-    //                 }
-    //             }
-    //             // Copy best_take_seq to avoid borrow checker issue
-    //             let best_take_seq = use_joker_base.best_take_seq;
-    //             let seq_cards = use_joker_base.get_seq_meld_cards(hand, &best_take_seq);
-    //             use_joker_base.meld_cards = use_joker_base.get_rank_meld_cards(&rank_cards);
-    //             use_joker_base.meld_cards.extend(seq_cards);
-    //             let new_score = melds_value(&use_joker_base.meld_cards);
-    //             let diff = new_score - melds_score;
-    //             if diff <= 15 && card_penality(&hand[i]) <= 6 {
-    //                 discard_card.push((16 - diff, i));
-    //             }
-    //         }
-    //     }
-    //     return 0;
-    // }
+                    let mut cards = hand
+                        .iter()
+                        .enumerate()
+                        .filter(|(index, _)| *index == j || *index == k)
+                        .map(|(_, card)| card.clone())
+                        .collect::<Vec<Card>>();
+
+                    cards.push(fake_joker.clone());
+
+                    if use_joker_base.get_rank_meld(&cards, &7, false) != -1 {
+                        new_candidate_cards |= 1 << j;
+                        new_candidate_cards |= 1 << k;
+                    } else if use_joker_base.get_seq_meld(&cards, &7, false) != -1 {
+                        new_candidate_cards |= 1 << j;
+                        new_candidate_cards |= 1 << k;
+                    }
+                }
+            }
+            if mask & (1 << i) != 0 {
+                if !melded {
+                    continue;
+                }
+                // get new cards
+                let new_cards: Vec<Card> = hand
+                    .iter()
+                    .enumerate()
+                    .filter(|(index, _)| new_candidate_cards & (1 << index) != 0)
+                    .map(|(_, card)| card.clone())
+                    .collect::<Vec<Card>>();
+                use_joker_base.reset_calc_values();
+                use_joker_base.calc(&new_cards);
+
+                let mut rank_cards = Vec::new();
+                for i in 0..hand.len() {
+                    if (use_joker_base.best_take_rank & (1 << i)) != 0 {
+                        rank_cards.push(hand[i].clone());
+                    }
+                }
+                // Copy best_take_seq to avoid borrow checker issue
+                let best_take_seq = use_joker_base.best_take_seq;
+                let seq_cards = use_joker_base.get_seq_meld_cards(hand, &best_take_seq);
+                use_joker_base.meld_cards = use_joker_base.get_rank_meld_cards(&rank_cards);
+                use_joker_base.meld_cards.extend(seq_cards);
+                let new_score = melds_value(&use_joker_base.meld_cards);
+                let diff = new_score - melds_score;
+                if diff <= 15 && 51 - melds_score >= 20 && card_penality(&hand[i]) <= 6 {
+                    discard_card.push((10000 * card_cost, i));
+                }
+            } else {
+                let diff: i32 = new_candidate_cards ^ (candidate_cards as i32);
+                if diff.count_ones() == 1 {
+                    discard_card.push((10000 * card_cost, i));
+                } else if diff.count_ones() == 2 {
+                    discard_card.push((7000 * card_cost, i));
+                }
+            }
+        }
+        // sort discard_card by cost, the highest cost card is discarded first
+        discard_card.sort_by(|a, b| b.0.cmp(&a.0));
+        let mut index = discard_card[0].1;
+        if self.get_joker_card(&hand[index], table_melds) && discard_card.len() > 1 {
+            index = discard_card[1].1;
+            if self.get_joker_card(&hand[index], table_melds) && discard_card.len() > 2 {
+                index = discard_card[2].1;
+            }
+        }
+        index
+    }
 }
 
 impl BotStrategy for UseBetterDiscard {
@@ -245,81 +325,16 @@ impl BotStrategy for UseBetterDiscard {
     }
 
     fn decide_discard(&mut self, state: &RoundState) -> usize {
-        let player = &state.players[state.current_player];
-        let hand = &player.hand;
+        let player: &ActivePlayer = &state.players[state.current_player];
+        let hand: &Vec<Card> = &player.hand;
+        let melded = player.melded;
         let candidate_card = self.candidate_melds(hand);
         for (i, card) in hand.iter().enumerate() {
             if candidate_card & (1 << i) == 0 {
                 println!("Card {:?} is bad", card.id.clone());
             }
         }
-        let ans;
-        if candidate_card.count_ones() == hand.len() as u32 || (2..=3).contains(&hand.len()) {
-            if player.melded {
-                // return highest card
-                let max = hand
-                    .iter()
-                    .max_by_key(|c| {
-                        if c.rank == Rank::Joker {
-                            0
-                        } else {
-                            card_penality(c)
-                        }
-                    })
-                    .unwrap();
-                ans = hand.iter().position(|c| c.id == max.id).unwrap();
-            } else {
-                let min = hand
-                    .iter()
-                    .min_by_key(|c| {
-                        if c.rank == Rank::Joker {
-                            999
-                        } else {
-                            card_penality(c)
-                        }
-                    })
-                    .unwrap();
-                println!("{}", card_penality(&min));
-                ans = hand.iter().position(|c| c.id == min.id).unwrap();
-            }
-        } else {
-            if player.melded {
-                // return highest card
-                let max = hand
-                    .iter()
-                    .enumerate()
-                    .max_by_key(|(i, c)| {
-                        if c.rank == Rank::Joker {
-                            0
-                        } else {
-                            if candidate_card & (1 << i) != 0 {
-                                0
-                            } else {
-                                card_penality(c)
-                            }
-                        }
-                    })
-                    .unwrap();
-                ans = hand.iter().position(|c| c.id == max.1.id).unwrap();
-            } else {
-                let min = hand
-                    .iter()
-                    .enumerate()
-                    .min_by_key(|(i, c)| {
-                        if c.rank == Rank::Joker {
-                            999
-                        } else {
-                            if candidate_card & (1 << i) != 0 {
-                                999
-                            } else {
-                                card_penality(c)
-                            }
-                        }
-                    })
-                    .unwrap();
-                ans = hand.iter().position(|c| c.id == min.1.id).unwrap();
-            }
-        }
+        let ans = self.evaluate_discard_option(hand, candidate_card, melded, &state.table_melds);
         // print the card
         println!("Discarding card: {:?}", hand[ans]);
         ans

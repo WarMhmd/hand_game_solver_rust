@@ -239,4 +239,208 @@ mod tests {
             }
         }
     }
+
+    #[test]
+    fn test_decide_discard_specific_hand_not_melded() {
+        // Test decide_discard with the specific hand when player is not melded
+        let mut bot = UseBetterDiscard::new("TestBot".to_string());
+
+        let hand = vec![
+            create_card("heart-4", Suit::Hearts, Rank::Number(4)),
+            create_card("heart-5", Suit::Hearts, Rank::Number(5)),
+            create_card("heart-K", Suit::Hearts, Rank::King),
+            create_card("spade-3", Suit::Spades, Rank::Number(3)),
+            create_card("spade-6", Suit::Spades, Rank::Number(6)),
+            create_card("spade-A", Suit::Spades, Rank::Ace),
+            create_card("diamond-5", Suit::Diamonds, Rank::Number(5)),
+            create_card("diamond-6", Suit::Diamonds, Rank::Number(6)),
+            create_card("diamond-A", Suit::Diamonds, Rank::Ace),
+            create_card("club-2", Suit::Clubs, Rank::Number(2)),
+            create_card("club-3", Suit::Clubs, Rank::Number(3)),
+            create_card("club-6", Suit::Clubs, Rank::Number(6)),
+            create_card("club-8", Suit::Clubs, Rank::Number(8)),
+            create_card("club-J", Suit::Clubs, Rank::Jack),
+            create_card("spade-5", Suit::Spades, Rank::Number(5)),
+        ];
+
+        println!("\n=== Testing decide_discard with specific hand (not melded) ===");
+        println!("Hand:");
+        for (i, card) in hand.iter().enumerate() {
+            println!(
+                "  [{}] Card: \"{}-{}\"",
+                i,
+                format!("{:?}", card.suit).to_lowercase(),
+                match card.rank {
+                    Rank::Ace => "A".to_string(),
+                    Rank::King => "K".to_string(),
+                    Rank::Queen => "Q".to_string(),
+                    Rank::Jack => "J".to_string(),
+                    Rank::Number(n) => n.to_string(),
+                    Rank::Joker => "Joker".to_string(),
+                }
+            );
+        }
+
+        let player = create_test_player("P1", hand.clone(), false);
+        let state = create_test_round_state_with_player(player);
+
+        // First, find melds to populate internal state
+        let melds = bot.find_melds(&hand);
+        println!("\nMelds found: {}", melds.len());
+        for (i, meld) in melds.iter().enumerate() {
+            println!("\nMeld {} ({:?}):", i + 1, meld.meld_type);
+            for card in &meld.cards {
+                println!("  {} {}", card.rank, card.suit);
+            }
+        }
+
+        let discard_index = bot.decide_discard(&state);
+
+        println!("\n=== Discard Decision ===");
+        println!("Discard index: {}", discard_index);
+        println!(
+            "Discarded card: {} {}",
+            hand[discard_index].rank, hand[discard_index].suit
+        );
+        println!("Card ID: {}", hand[discard_index].id);
+        println!("Card penalty: {}", card_penality(&hand[discard_index]));
+
+        // Verify it's a valid index
+        assert!(discard_index < hand.len());
+        println!("\n✓ Test completed - valid discard chosen");
+    }
+
+    #[test]
+    fn test_decide_discard_nine_card_hand_melded() {
+        // Test decide_discard with 9-card hand when player is melded
+        let mut bot = UseBetterDiscard::new("TestBot".to_string());
+
+        let hand = vec![
+            create_card("heart-K", Suit::Hearts, Rank::King),
+            create_card("spade-10", Suit::Spades, Rank::Number(10)),
+            create_card("spade-Q", Suit::Spades, Rank::Queen),
+            create_card("diamond-6", Suit::Diamonds, Rank::Number(6)),
+            create_card("diamond-7", Suit::Diamonds, Rank::Number(7)),
+            create_card("club-5", Suit::Clubs, Rank::Number(5)),
+            create_card("club-K", Suit::Clubs, Rank::King),
+            create_card("club-4", Suit::Clubs, Rank::Number(4)),
+            create_card("club-2", Suit::Clubs, Rank::Number(2)),
+        ];
+
+        println!("\n=== Testing decide_discard with 9-card hand (melded) ===");
+        println!("Hand:");
+        for (i, card) in hand.iter().enumerate() {
+            println!(
+                "  [{}] Card: \"{}-{}\"",
+                i,
+                format!("{:?}", card.suit).to_lowercase(),
+                match card.rank {
+                    Rank::Ace => "A".to_string(),
+                    Rank::King => "K".to_string(),
+                    Rank::Queen => "Q".to_string(),
+                    Rank::Jack => "J".to_string(),
+                    Rank::Number(n) => n.to_string(),
+                    Rank::Joker => "Joker".to_string(),
+                }
+            );
+        }
+
+        let player = create_test_player("P1", hand.clone(), true); // melded = true
+        let state = create_test_round_state_with_player(player);
+
+        // First, find melds to populate internal state
+        let melds = bot.find_melds(&hand);
+        println!("\nMelds found: {}", melds.len());
+        for (i, meld) in melds.iter().enumerate() {
+            println!("\nMeld {} ({:?}):", i + 1, meld.meld_type);
+            for card in &meld.cards {
+                println!("  {} {}", card.rank, card.suit);
+            }
+        }
+
+        let discard_index = bot.decide_discard(&state);
+
+        println!("\n=== Discard Decision ===");
+        println!("Discard index: {}", discard_index);
+        println!(
+            "Discarded card: {} {}",
+            hand[discard_index].rank, hand[discard_index].suit
+        );
+        println!("Card ID: {}", hand[discard_index].id);
+        println!("Card penalty: {}", card_penality(&hand[discard_index]));
+
+        // Verify it's a valid index
+        assert!(discard_index < hand.len());
+        println!("\n✓ Test completed - valid discard chosen");
+    }
+
+    #[test]
+    fn test_decide_discard_fifteen_card_hand_not_melded() {
+        // Test decide_discard with 15-card hand when player is not melded
+        let mut bot = UseBetterDiscard::new("TestBot".to_string());
+
+        let hand = vec![
+            create_card("heart-7", Suit::Hearts, Rank::Number(7)),
+            create_card("heart-9", Suit::Hearts, Rank::Number(9)),
+            create_card("spade-7", Suit::Spades, Rank::Number(7)),
+            create_card("diamond-9", Suit::Diamonds, Rank::Number(9)),
+            create_card("diamond-J", Suit::Diamonds, Rank::Jack),
+            create_card("diamond-A", Suit::Diamonds, Rank::Ace),
+            create_card("club-6", Suit::Clubs, Rank::Number(6)),
+            create_card("club-7", Suit::Clubs, Rank::Number(7)),
+            create_card("club-8", Suit::Clubs, Rank::Number(8)),
+            create_card("club-10", Suit::Clubs, Rank::Number(10)),
+            create_card("diamond-4", Suit::Diamonds, Rank::Number(4)),
+            create_card("spade-A", Suit::Spades, Rank::Ace),
+            create_card("spade-K", Suit::Spades, Rank::King),
+            create_card("spade-4", Suit::Spades, Rank::Number(4)),
+            create_card("spade-9", Suit::Spades, Rank::Number(9)),
+        ];
+
+        println!("\n=== Testing decide_discard with 15-card hand (not melded) ===");
+        println!("Hand:");
+        for (i, card) in hand.iter().enumerate() {
+            println!(
+                "  [{}] Card: \"{}-{}\"",
+                i,
+                format!("{:?}", card.suit).to_lowercase(),
+                match card.rank {
+                    Rank::Ace => "A".to_string(),
+                    Rank::King => "K".to_string(),
+                    Rank::Queen => "Q".to_string(),
+                    Rank::Jack => "J".to_string(),
+                    Rank::Number(n) => n.to_string(),
+                    Rank::Joker => "Joker".to_string(),
+                }
+            );
+        }
+
+        let player = create_test_player("P1", hand.clone(), false); // melded = false
+        let state = create_test_round_state_with_player(player);
+
+        // First, find melds to populate internal state
+        let melds = bot.find_melds(&hand);
+        println!("\nMelds found: {}", melds.len());
+        for (i, meld) in melds.iter().enumerate() {
+            println!("\nMeld {} ({:?}):", i + 1, meld.meld_type);
+            for card in &meld.cards {
+                println!("  {} {}", card.rank, card.suit);
+            }
+        }
+
+        let discard_index = bot.decide_discard(&state);
+
+        println!("\n=== Discard Decision ===");
+        println!("Discard index: {}", discard_index);
+        println!(
+            "Discarded card: {} {}",
+            hand[discard_index].rank, hand[discard_index].suit
+        );
+        println!("Card ID: {}", hand[discard_index].id);
+        println!("Card penalty: {}", card_penality(&hand[discard_index]));
+
+        // Verify it's a valid index
+        assert!(discard_index < hand.len());
+        println!("\n✓ Test completed - valid discard chosen");
+    }
 }

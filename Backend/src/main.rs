@@ -61,7 +61,8 @@ async fn main() {
         ack_trackers: Arc::new(RwLock::new(HashMap::new())),
     };
 
-    let allowed_origins_str = "https://www.jawaker.com,https://cdn.jawaker.com,https://hand.warmhmd.online";
+    let allowed_origins_str =
+        "https://www.jawaker.com,https://cdn.jawaker.com,https://hand.warmhmd.online";
     let allowed_origins: Vec<HeaderValue> = allowed_origins_str
         .split(',')
         .map(|s| HeaderValue::from_str(s.trim()).unwrap())
@@ -69,17 +70,21 @@ async fn main() {
 
     let cors = CorsLayer::new()
         .allow_origin(AllowOrigin::list(allowed_origins))
-        .allow_methods([Method::GET, Method::POST, Method::OPTIONS, Method::PUT, Method::DELETE, Method::PATCH])
+        .allow_methods([
+            Method::GET,
+            Method::POST,
+            Method::OPTIONS,
+            Method::PUT,
+            Method::DELETE,
+            Method::PATCH,
+        ])
         .allow_headers([
             http::header::CONTENT_TYPE,
             http::header::AUTHORIZATION,
             http::header::ACCEPT,
         ])
         .allow_credentials(true)
-        .expose_headers([
-            http::header::CONTENT_TYPE,
-            http::header::CONTENT_LENGTH,
-        ]);
+        .expose_headers([http::header::CONTENT_TYPE, http::header::CONTENT_LENGTH]);
 
     async fn health_check() -> &'static str {
         "OK"
@@ -116,9 +121,9 @@ async fn main() {
         .layer(cors)
         .with_state(Arc::new(state));
 
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:3010").await.unwrap();
 
-    println!("🚀 Backend running on http://0.0.0.0:3000");
-    println!("🔌 WebSocket endpoint: ws://0.0.0.0:3000/ws");
+    println!("🚀 Backend running on http://0.0.0.0:3010");
+    println!("🔌 WebSocket endpoint: ws://0.0.0.0:3010/ws");
     axum::serve(listener, app).await.unwrap();
 }

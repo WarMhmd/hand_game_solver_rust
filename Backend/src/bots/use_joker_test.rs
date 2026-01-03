@@ -710,4 +710,70 @@ mod tests {
         // Verify the function doesn't panic
         println!("\n✓ Test completed without panic");
     }
+
+    #[test]
+    fn test_decide_melds_four_card_hand_melded() {
+        // Test decide_melds with a specific 4-card hand when player is already melded
+        // Hand: spade-2, spade-A, heart-2, spade-3
+        let mut bot = UseJokerBot::new("TestBot".to_string());
+
+        let hand = vec![
+            create_card("spade-2", Suit::Spades, Rank::Number(2)),
+            create_card("spade-A", Suit::Spades, Rank::Ace),
+            create_card("heart-2", Suit::Hearts, Rank::Number(2)),
+            create_card("spade-3", Suit::Spades, Rank::Number(3)),
+        ];
+
+        println!("\n=== Testing decide_melds with 4-card hand (player melded) ===");
+        println!("Hand:");
+        for (i, card) in hand.iter().enumerate() {
+            println!(
+                "  [{}] Card: \"{}-{}\"",
+                i,
+                format!("{:?}", card.suit).to_lowercase(),
+                match card.rank {
+                    Rank::Ace => "A".to_string(),
+                    Rank::King => "K".to_string(),
+                    Rank::Queen => "Q".to_string(),
+                    Rank::Jack => "J".to_string(),
+                    Rank::Number(n) => n.to_string(),
+                    Rank::Joker => "Joker".to_string(),
+                }
+            );
+        }
+
+        let player = create_test_player("P1", hand.clone());
+        let mut state = create_test_round_state_with_player(player);
+        state.players[0].melded = true; // Player is already melded
+
+        println!("\nPlayer melded status: {}", state.players[0].melded);
+
+        let melds = bot.decide_melds(&state);
+
+        println!("\nMelds found: {}", melds.len());
+        for (i, meld) in melds.iter().enumerate() {
+            println!("\nMeld {} ({:?}):", i + 1, meld.meld_type);
+            for card in &meld.cards {
+                println!(
+                    "  {} {}",
+                    match card.rank {
+                        Rank::Ace => "A".to_string(),
+                        Rank::King => "K".to_string(),
+                        Rank::Queen => "Q".to_string(),
+                        Rank::Jack => "J".to_string(),
+                        Rank::Number(n) => n.to_string(),
+                        Rank::Joker => "Joker".to_string(),
+                    },
+                    card.suit
+                );
+            }
+            println!("  Value: {}", meld_value(meld));
+        }
+
+        let total_value = melds_value(&melds);
+        println!("\nTotal meld value: {}", total_value);
+
+        // Since player is already melded, any valid meld should be returned regardless of score
+        println!("\n✓ Test completed - player is melded, so any valid melds are acceptable");
+    }
 }

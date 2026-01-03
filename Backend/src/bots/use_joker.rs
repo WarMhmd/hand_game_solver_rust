@@ -226,6 +226,7 @@ impl UseJokerBot {
         let mut joker_cards: Vec<&Card> = Vec::with_capacity(2);
         // Pre-allocate groups with proper capacity
         let mut groups: [Vec<&Card>; 4] = [Vec::new(), Vec::new(), Vec::new(), Vec::new()];
+        // println!("============");
 
         for i in 0..hand.len() {
             if 1 & (take_seq >> i) == 0 {
@@ -240,6 +241,7 @@ impl UseJokerBot {
                 let mut placed = false;
                 for group in &mut groups {
                     if group.is_empty() || group[0].suit == card.suit {
+                        // println!("card: {:?}", card);
                         group.push(card);
                         placed = true;
                         break;
@@ -253,7 +255,6 @@ impl UseJokerBot {
                 }
             }
         }
-
         let mut all_melds: Vec<Meld> = Vec::with_capacity(15);
 
         for group in &groups {
@@ -398,10 +399,7 @@ impl UseJokerBot {
                     continue;
                 }
                 if joker_cards.is_empty() {
-                    if with_memo {
-                        self.dp_rank_seq[take_seq_index] = -1;
-                    }
-                    return -1;
+                    break;
                 }
 
                 if !aces_cards.is_empty()
@@ -1581,9 +1579,9 @@ impl BotStrategy for UseJokerBot {
     fn find_melds(&mut self, hand: &Vec<Card>) -> Vec<Meld> {
         self.reset_calc_values();
 
-        // let start = std::time::Instant::now();
+        let start = std::time::Instant::now();
         self.calc(hand);
-        // println!("calc time: {:?}ms", start.elapsed().as_millis());
+        println!("calc time: {:?}ms", start.elapsed().as_millis());
 
         if self.max_cards_count > 0 {
             let mut rank_cards = Vec::new();

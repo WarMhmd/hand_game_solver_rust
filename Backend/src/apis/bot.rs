@@ -257,6 +257,7 @@ pub async fn play_in_melds(
 pub struct DiscardData {
     bot_id: String,
     cards: Vec<Card>,
+    table_melds: Vec<Vec<Card>>,
 }
 
 #[derive(Serialize)]
@@ -277,7 +278,26 @@ pub async fn discard(
 
     let round_state = RoundState {
         current_player: 0,
-        table_melds: vec![],
+        table_melds: data
+            .table_melds
+            .iter()
+            .map(|cards| {
+                let first_suit = cards.iter().find(|card| card.rank != Rank::Joker).unwrap();
+                let second_suit = cards
+                    .iter()
+                    .find(|card| card.rank != Rank::Joker && card.suit != first_suit.suit);
+
+                Meld {
+                    id: Uuid::new_v4().into(),
+                    cards: cards.clone(),
+                    meld_type: if second_suit.is_some() {
+                        MeldType::Rank
+                    } else {
+                        MeldType::Sequence
+                    },
+                }
+            })
+            .collect(),
         fire_pile: vec![],
         deck: vec![],
         phase: Phase::Discard,
