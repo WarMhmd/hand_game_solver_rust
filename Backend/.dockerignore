@@ -18,11 +18,7 @@ target/
 
 # Documentation
 *.md
-!ACKNOWLEDGMENT_EXAMPLE.md
-!QUICK_START_ACKS.md
-ACKNOWLEDGMENT_EXAMPLE.md
-QUICK_START_ACKS.md
-README.md
+
 
 # Archives
 *.zip

@@ -1,34 +1,45 @@
 # Hand Game Solver (Rust + React)
 
-A game/hand-solver project with:
-- A Rust backend (Axum) that hosts HTTP APIs + a WebSocket endpoint
-- A React + TypeScript (Vite) frontend that talks to the backend
+Hosted: https://hand.warmhmd.online/
 
-## Repo layout
-
-- `Backend/` — Rust server (Axum + Tokio)
-- `frontend/` — React app (Vite + Tailwind)
+This repo contains:
+- `Backend/`: Rust (Axum + Tokio) HTTP API + WebSocket server
+- `frontend/`: React + TypeScript (Vite) web UI
 
 ## Backend
 
-### What it exposes
+### Endpoints (verified in code)
 
-- HTTP API base: `http://localhost:3000/api/game`
-  - `POST /init_game` → creates a new game and returns the initial `GameState`
-- WebSocket endpoint: `ws://localhost:3000/ws`
+Backend listens on `0.0.0.0:3000`.
 
-The WebSocket layer uses an acknowledgment system so the server can (optionally) wait for clients to confirm they received certain events before continuing game logic.
+- `GET /`  returns a simple "Backend is running" string
+- `GET /health` returns `OK`
+- WebSocket: `GET /ws`
+
+Game APIs:
+- `POST /api/game/init_game`
+- `POST /api/game/init_game_with_random_strong_bots`
+- `POST /api/game/init_game_with_random_all_bots`
+
+Bot APIs:
+- `POST /api/v1/bot/init-bot`
+- `POST /api/v1/bot/draw-card`
+- `POST /api/v1/bot/meld-cards`
+- `POST /api/v1/bot/play-in-melds`
+- `POST /api/v1/bot/discard`
 
 ### Run locally
+
+From the repo root:
 
 ```bash
 cd Backend
 cargo run
 ```
 
-You should see logs like:
-- `Backend running on http://0.0.0.0:3000`
-- `WebSocket endpoint: ws://0.0.0.0:3000/ws`
+### CORS
+
+The backend CORS allowlist includes `http://localhost:3001` and `https://hand.warmhmd.online`.
 
 ## Frontend
 
@@ -40,47 +51,32 @@ npm install
 npm run dev
 ```
 
-### Build
+The dev server runs on `http://localhost:3001`.
 
-```bash
-cd frontend
-npm run build
-```
+### Configure backend URLs (optional)
 
-## Docker Deployment
+The frontend defaults to local endpoints, but can be overridden with Vite env vars:
 
-### Using Docker Compose
+- `VITE_GAME_API_ENDPOINT` (default: `http://localhost:3000/api/game`)
+- `VITE_WS_ENDPOINT` (default: `ws://localhost:3000/ws`)
 
-```bash
-docker-compose up
-```
+## Docker
 
-This will start:
-- **Backend**: http://localhost:3000
-- **Frontend**: http://localhost:3001
+### Backend image
 
-### Individual Services
-
-Backend:
 ```bash
 cd Backend
 docker build -t hand-game-backend .
 docker run -p 3000:3000 hand-game-backend
 ```
 
-Frontend:
-```bash
-cd frontend
-docker build -t hand-game-frontend .
-docker run -p 3001:3001 hand-game-frontend
+### Docker Compose
+
+`docker-compose.yml` currently defines only the backend service and uses `expose: 3000` (intended for use behind a reverse proxy like Traefik).
+
+If you want to access it directly on your machine without a reverse proxy, add a port mapping under `backend:`:
+
+```yaml
+ports:
+  - "3000:3000"
 ```
-
-## Tech stack
-
-- Backend: Rust (edition 2021), Axum, Tokio, Serde
-- Frontend: React + TypeScript, Vite, Tailwind
-
-## Notes
-
-- The backend binds to `0.0.0.0:3000` for Docker compatibility
-- WebSocket message types and the ack/wait architecture are documented in `Backend/src/websocket/README.md`

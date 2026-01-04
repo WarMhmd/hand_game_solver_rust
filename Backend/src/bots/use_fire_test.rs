@@ -2,6 +2,7 @@
 mod tests {
     use crate::bot::{BotStrategy, DecideDrawResult};
     use crate::bots::use_fire::UseFireBot;
+    use crate::bots::use_joker::UseJokerBot;
     use crate::logic::*;
 
     // Helper function to create a card
@@ -11,6 +12,47 @@ mod tests {
             suit,
             rank,
         }
+    }
+
+    fn parse_hand(hand: &str) -> Vec<Card> {
+        hand.split_whitespace()
+            .enumerate()
+            .map(|(idx, token)| parse_card_token(token, idx))
+            .collect()
+    }
+
+    fn parse_card_token(token: &str, idx: usize) -> Card {
+        if token.eq_ignore_ascii_case("joker") {
+            return create_card(&format!("Joker-{}", idx), Suit::Joker, Rank::Joker);
+        }
+
+        let suit_ch = token
+            .chars()
+            .last()
+            .expect("card token must have a suit char");
+        let suit = match suit_ch {
+            'H' | 'h' => Suit::Hearts,
+            'D' | 'd' => Suit::Diamonds,
+            'C' | 'c' => Suit::Clubs,
+            'S' | 's' => Suit::Spades,
+            _ => panic!("unknown suit char in token: {}", token),
+        };
+
+        let rank_str = &token[..token.len() - suit_ch.len_utf8()];
+        let rank = match rank_str {
+            "A" | "a" => Rank::Ace,
+            "K" | "k" => Rank::King,
+            "Q" | "q" => Rank::Queen,
+            "J" | "j" => Rank::Jack,
+            _ => {
+                let n: i32 = rank_str
+                    .parse()
+                    .unwrap_or_else(|_| panic!("unknown rank in token: {}", token));
+                Rank::Number(n)
+            }
+        };
+
+        create_card(&format!("{}-{}", token, idx), suit, rank)
     }
 
     // Helper function to create a test player
@@ -201,5 +243,33 @@ mod tests {
 
         assert!(matches!(result, DecideDrawResult::Deck));
         println!("\n✓ Bot correctly chose DECK when fire pile is empty");
+    }
+
+    #[test]
+    fn test_use_joker_melds_value_matches_cpp_cases() {
+        let cases: Vec<(&str, i32)> = vec![
+            ("7S 5D 4C 4C 3S 7C JH 10H QH QH AH 6H 9C KH 4H", 61),
+            ("2H 8S 4S 9D 3C 7C QH KH 2D AH 2H 6D 10H Joker 4D", 51),
+            ("7C 4S QS 8C QH 3D AS 10S 6D QS AH KS 6D 2H JS", 61),
+            ("9C 10S 5S 5C 9H JS AS 3D KC 9S QH Joker 2S 7C QS", 78),
+            ("AH 7H 3H QD 4C 7H 3D 2D JH KH 10H 3C QH AH Joker", 70),
+            ("4H 2C 3C 10S 9D Joker 6D AC KH Joker AS JS KS 5S 8H", 77),
+            ("AC 10S QC 6H 10C 4C JC 7D 3D QH 2D 2D QH Joker AD", 67),
+            ("9S 10D 7C 4D 9D Joker KC AD 6S 5S 7C Joker QH QD 2D", 60),
+            ("QS KC 8D 5H JH Joker KC AH 6H 4H 2D 4D QS 7H 3H", 38),
+        ];
+
+        for (hand_str, expected_cpp) in cases {
+            let mut bot = UseJokerBot::new("TestBot".to_string());
+            let hand = parse_hand(hand_str);
+            let melds = bot.find_melds(&hand);
+            let total = melds_value(&melds);
+
+            assert_eq!(
+                total, expected_cpp,
+                "melds_value mismatch for hand: {} (melds={:?})",
+                hand_str, melds
+            );
+        }
     }
 }

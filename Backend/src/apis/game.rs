@@ -18,7 +18,7 @@ pub async fn init_game(State(state): State<Arc<AppState>>) -> Json<GameState> {
         Player {
             id: Uuid::new_v4().into(),
             name: "Player 1".to_string(),
-            bot_strategy: None,
+            bot_strategy: Some(Box::new(UseBetterMeldPlay::new("fire 0".into()))),
             score: 0,
             sender: None,
             did_join: false,
@@ -49,7 +49,7 @@ pub async fn init_game(State(state): State<Arc<AppState>>) -> Json<GameState> {
         },
     ];
 
-    let game_state = GameState::new(players, 4);
+    let game_state = GameState::new(players, 1000);
     let game_id = game_state.id.clone();
     let result = Json(game_state.clone());
 

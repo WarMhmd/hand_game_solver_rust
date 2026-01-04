@@ -720,7 +720,7 @@ pub async fn start_game(
 }
 
 async fn wait_bot() {
-    tokio::time::sleep(Duration::from_millis(500)).await;
+    tokio::time::sleep(Duration::from_millis(1)).await;
 }
 
 pub struct RoundState {
@@ -847,41 +847,133 @@ pub fn card_penality(card: &Card) -> i32 {
 
 pub fn meld_value(meld: &Meld) -> i32 {
     let mut val = meld.cards.iter().map(|c| card_value(c)).sum::<i32>();
-    let joker_card = meld.cards.iter().find(|c| c.rank == Rank::Joker);
 
-    if let Some(joker) = joker_card {
-        if meld.meld_type == MeldType::Rank {
+    let joker_count = meld.cards.iter().filter(|c| c.rank == Rank::Joker).count();
+    if joker_count == 0 {
+        return val;
+    }
+
+    match meld.meld_type {
+        MeldType::Rank => {
             let first_card = meld.cards.iter().find(|c| c.rank != Rank::Joker).unwrap();
-            val += card_value(first_card);
-        } else if meld.meld_type == MeldType::Sequence {
-            let card_index = meld.cards.iter().position(|c| c == joker).unwrap();
-            let prev_card = if card_index > 0 {
-                meld.cards.get(card_index - 1)
-            } else {
-                None
-            };
-            let next_card = meld.cards.get(card_index + 1);
+            val += joker_count as i32 * card_value(first_card);
+            val
+        }
+        MeldType::Sequence => {
+            // Score jokers by assigning them concrete ranks that form a valid sequence.
+            // This is important when there are 2+ jokers; the old logic only scored one.
 
-            if let Some(prev) = prev_card {
-                val += if prev.rank == Rank::King {
-                    11 // Joker is A
-                } else if card_value(prev) == 10 {
-                    10 // Joker is J, Q, K
-                } else {
-                    card_value(prev) + 1 // Joker is 3-10
-                };
-            } else if let Some(next) = next_card {
-                val += if next.rank == Rank::Number(2) {
-                    11 // Joker is A
-                } else if card_value(next) == 10 && next.rank != Rank::Number(10) {
-                    10
-                } else {
-                    card_value(next) - 1
-                };
+            fn order_score(order: i32) -> i32 {
+                match order {
+                    0 | 13 => 11,      // Ace
+                    1..=8 => order + 1, // 2..=9
+                    9 => 10,           // 10
+                    10 | 11 | 12 => 10, // J/Q/K
+                    _ => 0,
+                }
             }
+
+            fn allowed_step(prev: i32, next: i32, pos_next: usize, len: usize) -> bool {
+                // Sequence ordering indices:
+                // Ace(low)=0, 2=1, ..., 10=9, J=10, Q=11, K=12, Ace(high)=13
+                if prev == 0 {
+                    // Ace(low) can only be at the beginning (A-2-...)
+                    return pos_next == 1 && next == 1;
+                }
+                if prev == 12 && next == 13 {
+                    // K-A(high) allowed only if Ace is the last card
+                    return pos_next == len - 1;
+                }
+                if prev >= 1 && prev <= 11 {
+                    return next == prev + 1;
+                }
+                false
+            }
+
+            let len = meld.cards.len();
+            if len == 0 {
+                return 0;
+            }
+
+            // Build possible order values per position.
+            let mut options: Vec<Vec<i32>> = Vec::with_capacity(len);
+            for (idx, card) in meld.cards.iter().enumerate() {
+                let mut opts = match card.rank {
+                    Rank::Joker => (0..=13).collect::<Vec<i32>>(),
+                    Rank::Ace => vec![0, 13],
+                    Rank::King => vec![12],
+                    Rank::Queen => vec![11],
+                    Rank::Jack => vec![10],
+                    Rank::Number(n) => {
+                        if n >= 2 && n <= 10 {
+                            vec![n - 1]
+                        } else {
+                            vec![]
+                        }
+                    }
+                };
+
+                // Prune impossible placements for Ace representations at the boundaries.
+                // - Ace(low)=0 only makes sense at the start.
+                // - Ace(high)=13 only makes sense at the end.
+                if idx != 0 {
+                    opts.retain(|&o| o != 0);
+                }
+                if idx != len - 1 {
+                    opts.retain(|&o| o != 13);
+                }
+
+                if opts.is_empty() {
+                    return -1;
+                }
+                options.push(opts);
+            }
+
+            // DP over positions and last chosen order.
+            // dp[last_order] = best total score up to current position.
+            let mut dp = vec![i32::MIN / 4; 14];
+            for &o in &options[0] {
+                dp[o as usize] = order_score(o);
+            }
+
+            for pos in 1..len {
+                let mut next_dp = vec![i32::MIN / 4; 14];
+                for prev_order in 0..=13 {
+                    let prev_best = dp[prev_order as usize];
+                    if prev_best <= i32::MIN / 8 {
+                        continue;
+                    }
+                    for &o in &options[pos] {
+                        if allowed_step(prev_order, o, pos, len) {
+                            let cand = prev_best.saturating_add(order_score(o));
+                            let slot = &mut next_dp[o as usize];
+                            if cand > *slot {
+                                *slot = cand;
+                            }
+                        }
+                    }
+                }
+                dp = next_dp;
+            }
+
+            let best_total = *dp.iter().max().unwrap();
+            if best_total <= i32::MIN / 8 {
+                return -1;
+            }
+
+            // `best_total` includes scoring for all cards (including jokers as chosen ranks).
+            // Our base `val` already counted jokers as 0, and non-jokers correctly.
+            // So we only need to add the additional joker score.
+            let non_joker_sum = meld
+                .cards
+                .iter()
+                .filter(|c| c.rank != Rank::Joker)
+                .map(card_value)
+                .sum::<i32>();
+            let joker_extra = best_total - non_joker_sum;
+            val + joker_extra
         }
     }
-    val
 }
 
 pub fn melds_value(melds: &Vec<Meld>) -> i32 {

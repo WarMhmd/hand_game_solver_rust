@@ -217,22 +217,19 @@ impl UseJokerBot {
         melds_val
     }
 
-    pub fn get_seq_meld(&mut self, hand: &Vec<Card>, take_seq: &u32, with_memo: bool) -> i32 {
-        // print the ones and zeros of take_seq
-        let take_seq_index = *take_seq as usize;
-        if with_memo && self.dp_rank_seq[take_seq_index] != -2 {
-            return self.dp_rank_seq[take_seq_index];
-        }
+    pub fn build_seq_melds(&mut self, hand: &Vec<Card>, take_seq: &u32) -> Result<Vec<Meld>, ()> {
         let mut joker_cards: Vec<&Card> = Vec::with_capacity(2);
         // Pre-allocate groups with proper capacity
         let mut groups: [Vec<&Card>; 4] = [Vec::new(), Vec::new(), Vec::new(), Vec::new()];
         // println!("============");
+        let mut seq_cards: Vec<&Card> = Vec::new();
 
         for i in 0..hand.len() {
             if 1 & (take_seq >> i) == 0 {
                 continue;
             }
             let card = &hand[i];
+            seq_cards.push(card);
 
             if card.rank == Rank::Joker {
                 joker_cards.push(card);
@@ -248,13 +245,11 @@ impl UseJokerBot {
                     }
                 }
                 if !placed {
-                    if with_memo {
-                        self.dp_rank_seq[take_seq_index] = -1;
-                    }
-                    return -1; // More than 4 suits, impossible
+                    return Err(());
                 }
             }
         }
+
         let mut all_melds: Vec<Meld> = Vec::with_capacity(15);
 
         for group in &groups {
@@ -274,11 +269,7 @@ impl UseJokerBot {
             }
 
             if new_cards.is_empty() {
-                if with_memo {
-                    self.dp_rank_seq[take_seq_index] = -1;
-                }
-
-                return -1;
+                return Err(());
             }
 
             // Cache rank orders to avoid repeated function calls
@@ -496,8 +487,71 @@ impl UseJokerBot {
                 .collect();
             invalid_meld_seqs = temp;
 
+            // Retry Connect a sequence
+            delete_invalid_index.clear();
+            for (i, iv_meld) in invalid_meld_seqs.iter().enumerate() {
+                if delete_invalid_index.contains(&i) {
+                    continue;
+                }
+                if joker_cards.is_empty() {
+                    break;
+                }
+
+                if !aces_cards.is_empty()
+                    && iv_meld.len() == 2
+                    && (iv_meld[0].rank == Rank::Number(2) || iv_meld[1].rank == Rank::King)
+                {
+                    continue;
+                }
+
+                let iv_last_rank = rank_order(iv_meld.last().unwrap().rank)[0];
+                let iv_first_rank = rank_order(iv_meld[0].rank)[0];
+
+                for (j, meld) in invalid_meld_seqs.iter().enumerate() {
+                    if delete_invalid_index.contains(&j) || i == j {
+                        continue;
+                    }
+
+                    let meld_first_rank = rank_order(meld[0].rank)[0];
+                    let meld_last_rank = rank_order(meld.last().unwrap().rank)[0];
+
+                    if iv_last_rank + 2 == meld_first_rank {
+                        let joker_card = joker_cards.pop().unwrap();
+                        delete_invalid_index.insert(i);
+                        delete_invalid_index.insert(j);
+                        let mut combined: Vec<&Card> = iv_meld.to_vec();
+                        combined.push(joker_card);
+                        combined.extend_from_slice(meld);
+                        valid_meld_seqs.push(combined);
+                        break;
+                    }
+
+                    if iv_first_rank == meld_last_rank + 2 {
+                        let joker_card = joker_cards.pop().unwrap();
+                        delete_invalid_index.insert(i);
+                        delete_invalid_index.insert(j);
+                        let mut combined: Vec<&Card> = meld.to_vec();
+                        combined.push(joker_card);
+                        combined.extend_from_slice(iv_meld);
+                        valid_meld_seqs.push(combined);
+                        break;
+                    }
+                }
+                if delete_invalid_index.contains(&i) {
+                    continue;
+                }
+            }
+            let temp: Vec<Vec<&Card>> = invalid_meld_seqs
+                .into_iter()
+                .enumerate()
+                .filter(|(i, _)| !delete_invalid_index.contains(i))
+                .map(|(_, m)| m)
+                .collect();
+            invalid_meld_seqs = temp;
+
             // Add needed Aces and Jokers
             delete_invalid_index.clear();
+
             for (i, meld) in invalid_meld_seqs.iter().enumerate() {
                 if meld.len() == 2 {
                     if !aces_cards.is_empty() {
@@ -508,10 +562,30 @@ impl UseJokerBot {
                             new_m.extend_from_slice(meld);
                             valid_meld_seqs.push(new_m);
                             continue;
+                        } else if meld[0].rank == Rank::Number(3) && !joker_cards.is_empty() {
+                            let ace_card = aces_cards.pop().unwrap();
+                            let joker_card = joker_cards.pop().unwrap();
+                            delete_invalid_index.insert(i);
+                            let mut new_m = vec![ace_card];
+                            new_m.push(joker_card);
+                            new_m.extend_from_slice(meld);
+                            valid_meld_seqs.push(new_m);
+                            continue;
                         } else if meld.last().unwrap().rank == Rank::King {
                             let ace_card = aces_cards.pop().unwrap();
                             delete_invalid_index.insert(i);
                             let mut new_m = meld.to_vec();
+                            new_m.push(ace_card);
+                            valid_meld_seqs.push(new_m);
+                            continue;
+                        } else if meld.last().unwrap().rank == Rank::Queen
+                            && !joker_cards.is_empty()
+                        {
+                            let ace_card = aces_cards.pop().unwrap();
+                            let joker_card = joker_cards.pop().unwrap();
+                            delete_invalid_index.insert(i);
+                            let mut new_m = meld.to_vec();
+                            new_m.push(joker_card);
                             new_m.push(ace_card);
                             valid_meld_seqs.push(new_m);
                             continue;
@@ -521,14 +595,13 @@ impl UseJokerBot {
                         let joker_card = joker_cards.pop().unwrap();
                         delete_invalid_index.insert(i);
                         let mut new_m = meld.to_vec();
-                        new_m.push(joker_card);
+                        if new_m[0].rank == Rank::Number(2) {
+                            new_m.insert(0, joker_card);
+                        } else {
+                            new_m.push(joker_card);
+                        }
                         valid_meld_seqs.push(new_m);
                         continue;
-                    } else {
-                        if with_memo {
-                            self.dp_rank_seq[take_seq_index] = -1;
-                        }
-                        return -1;
                     }
                 } else if meld.len() == 1 {
                     if !joker_cards.is_empty() || !aces_cards.is_empty() {
@@ -605,17 +678,7 @@ impl UseJokerBot {
                             let ace_card = aces_cards.pop().unwrap();
                             delete_invalid_index.insert(i);
                             valid_meld_seqs.push(vec![meld[0], joker_card, ace_card]);
-                        } else {
-                            if with_memo {
-                                self.dp_rank_seq[take_seq_index] = -1;
-                            }
-                            return -1;
                         }
-                    } else {
-                        if with_memo {
-                            self.dp_rank_seq[take_seq_index] = -1;
-                        }
-                        return -1;
                     }
                 }
             }
@@ -626,17 +689,13 @@ impl UseJokerBot {
                 .map(|(_, m)| m)
                 .collect();
             invalid_meld_seqs = temp;
-            if !invalid_meld_seqs.is_empty() {
-                if with_memo {
-                    self.dp_rank_seq[take_seq_index] = -1;
-                }
-                return -1;
-            }
 
             // Add ace cards
             while let Some(ace_card) = aces_cards.pop() {
                 let mut add_to: Option<usize> = None;
                 let mut is_left = false;
+                let mut add_joker = false;
+                let mut split_joker = false;
 
                 for (i, valid_meld) in valid_meld_seqs.iter().enumerate() {
                     if valid_meld[0].rank == Rank::Number(2)
@@ -646,6 +705,7 @@ impl UseJokerBot {
                         is_left = true;
                         break;
                     }
+
                     if valid_meld.last().unwrap().rank == Rank::King
                         || valid_meld[valid_meld.len() - 2].rank == Rank::Queen
                     {
@@ -653,75 +713,188 @@ impl UseJokerBot {
                         break;
                     }
                 }
+                // add using joker without split
+                if add_to.is_none() {
+                    for (i, valid_meld) in valid_meld_seqs.iter().enumerate() {
+                        // check if valid_meld contains joker_card
+                        if valid_meld.iter().any(|card| card.rank == Rank::Joker) {
+                            continue;
+                        }
+                        if valid_meld[0].rank == Rank::Number(3) && !joker_cards.is_empty() {
+                            add_to = Some(i);
+                            is_left = true;
+                            add_joker = true;
+                        }
+
+                        if valid_meld.last().unwrap().rank == Rank::Queen && !joker_cards.is_empty()
+                        {
+                            add_to = Some(i);
+                            add_joker = true;
+                            break;
+                        }
+                    }
+                }
+                if add_to.is_none() {
+                    // try to split joker meld
+                    for (i, valid_meld) in valid_meld_seqs.iter().enumerate() {
+                        // check if valid_meld contains joker_card
+                        if !valid_meld.iter().any(|card| card.rank == Rank::Joker) {
+                            continue;
+                        }
+                        if valid_meld[0].rank == Rank::Number(3) && !joker_cards.is_empty() {
+                            let joker_index = valid_meld
+                                .iter()
+                                .position(|c| c.rank == Rank::Joker)
+                                .unwrap();
+                            let left_meld = &valid_meld[0..joker_index];
+                            let right_meld = &valid_meld[joker_index + 1..];
+                            if left_meld.len() >= 1 && right_meld.len() >= 2 {
+                                add_to = Some(i);
+                                is_left = true;
+                                add_joker = true;
+                                split_joker = true;
+                            }
+                        }
+
+                        if valid_meld.last().unwrap().rank == Rank::Queen && !joker_cards.is_empty()
+                        {
+                            let joker_index = valid_meld
+                                .iter()
+                                .position(|c| c.rank == Rank::Joker)
+                                .unwrap();
+                            let left_meld = &valid_meld[0..joker_index];
+                            let right_meld = &valid_meld[joker_index + 1..];
+                            if left_meld.len() >= 2 && right_meld.len() >= 1 {
+                                add_to = Some(i);
+                                is_left = false;
+                                add_joker = true;
+                                split_joker = true;
+                                break;
+                            }
+                        }
+                    }
+                }
                 if let Some(idx) = add_to {
-                    if is_left {
-                        valid_meld_seqs[idx].insert(0, ace_card);
+                    if split_joker {
+                        let joker_index = valid_meld_seqs[idx]
+                            .iter()
+                            .position(|c| c.rank == Rank::Joker)
+                            .unwrap();
+                        let mut left_meld = valid_meld_seqs[idx][0..joker_index].to_vec();
+                        let mut right_meld = valid_meld_seqs[idx][joker_index + 1..].to_vec();
+                        let joker_d_card = valid_meld_seqs[idx][joker_index];
+                        let joker_card = joker_cards.pop().unwrap();
+                        valid_meld_seqs.remove(idx);
+                        if is_left {
+                            left_meld.insert(0, joker_card);
+                            left_meld.insert(0, ace_card);
+                            right_meld.push(joker_d_card);
+                        } else {
+                            left_meld.push(joker_d_card);
+                            right_meld.push(joker_card);
+                            right_meld.push(ace_card);
+                        }
+                        valid_meld_seqs.push(left_meld);
+                        valid_meld_seqs.push(right_meld);
                     } else {
-                        valid_meld_seqs[idx].push(ace_card);
+                        if is_left {
+                            if add_joker {
+                                let joker_card = joker_cards.pop().unwrap();
+                                valid_meld_seqs[idx].insert(0, joker_card);
+                            }
+                            valid_meld_seqs[idx].insert(0, ace_card);
+                        } else {
+                            if add_joker {
+                                let joker_card = joker_cards.pop().unwrap();
+                                valid_meld_seqs[idx].push(joker_card);
+                            }
+                            valid_meld_seqs[idx].push(ace_card);
+                        }
                     }
                 } else {
-                    if with_memo {
-                        self.dp_rank_seq[take_seq_index] = -1;
-                    }
-                    return -1;
+                    return Err(());
                 }
             }
 
-            // Add joker cards
-            while let Some(joker_card) = joker_cards.pop() {
-                let mut add_to: Option<usize> = None;
-                let mut max_value = 0;
-                let mut is_left = false;
+            // Retry Break a sequence
+            delete_invalid_index.clear();
+            for (i, iv_meld) in invalid_meld_seqs.iter().enumerate() {
+                if delete_invalid_index.contains(&i) {
+                    continue;
+                }
 
-                for (i, valid_meld) in valid_meld_seqs.iter().enumerate() {
-                    // check if valid_meld_seqs contains joker_card
-                    let contains_joker = valid_meld.iter().any(|card| card.rank == Rank::Joker);
-                    if contains_joker {
-                        continue;
-                    }
-                    let last_card = valid_meld.last().unwrap();
-                    if last_card.rank != Rank::Ace {
-                        let val = match last_card.rank {
-                            Rank::Number(n) if n >= 2 && n <= 9 => {
-                                rank_order(last_card.rank)[0] + 1
-                            }
-                            Rank::King => 11,
-                            _ => 10,
-                        };
-                        if val > max_value {
-                            max_value = val;
-                            add_to = Some(i);
-                            is_left = false;
-                        }
-                    }
-                    let first_card = valid_meld[0];
-                    if first_card.rank != Rank::Ace {
-                        let val = match first_card.rank {
-                            Rank::Number(n) if n >= 3 && n <= 10 => {
-                                rank_order(first_card.rank)[0] - 1
-                            }
-                            Rank::Number(2) => 11,
-                            _ => 10,
-                        };
-                        if val > max_value {
-                            max_value = val;
-                            add_to = Some(i);
-                            is_left = true;
-                        }
-                    }
-                }
-                if let Some(idx) = add_to {
-                    if is_left {
-                        valid_meld_seqs[idx].insert(0, joker_card);
+                let mut break_index: Option<usize> = None;
+
+                let rank_l = rank_order(iv_meld[0].rank)[0];
+                let rank_r = rank_order(iv_meld.last().unwrap().rank)[0];
+
+                for (j, meld) in valid_meld_seqs.iter().enumerate() {
+                    let rank_ll = if meld[0].rank == Rank::Joker {
+                        rank_order(meld[1].rank)[0] - 1
                     } else {
-                        valid_meld_seqs[idx].push(joker_card);
+                        rank_order(meld[0].rank)[0]
+                    };
+                    let last_card = meld.last().unwrap();
+                    let rank_rr = if last_card.rank == Rank::Joker {
+                        let before_last_card = meld[meld.len() - 2];
+                        rank_order(before_last_card.rank)[0] + 1
+                    } else {
+                        let rank_rr = rank_order(last_card.rank);
+                        rank_rr[rank_rr.len() - 1]
+                    };
+                    // 2H 8S 4S 9D 3C 7C QH KH 2D AH 2H 6D 10H Joker 4D
+                    if iv_meld.len() == 1 {
+                        if rank_ll <= rank_l - 2 && rank_rr >= rank_r + 2 {
+                            break_index = Some(j);
+                        }
+                    } else {
+                        if rank_ll <= rank_l - 1 && rank_rr >= rank_r + 1 {
+                            // println!(
+                            //     "2 break_index {} {} {} {}",
+                            //     rank_ll, rank_rr, rank_l, rank_r
+                            // );
+                            break_index = Some(j);
+                            break;
+                        }
                     }
-                } else {
-                    if with_memo {
-                        self.dp_rank_seq[take_seq_index] = -1;
-                    }
-                    return -1;
                 }
+
+                if let Some(idx) = break_index {
+                    let cards = valid_meld_seqs.swap_remove(idx);
+                    delete_invalid_index.insert(i);
+                    let cut_index = cards
+                        .iter()
+                        .enumerate()
+                        .position(|(i, c)| {
+                            if c.rank != Rank::Joker {
+                                c.rank == iv_meld[0].rank
+                            } else {
+                                if i == 0 {
+                                    false
+                                } else {
+                                    rank_order(cards[i - 1].rank)[0] + 1
+                                        == rank_order(iv_meld[0].rank)[0]
+                                }
+                            }
+                        })
+                        .unwrap();
+                    let mut new_part1: Vec<&Card> = cards[0..cut_index].to_vec();
+                    new_part1.extend_from_slice(iv_meld);
+                    let new_part2: Vec<&Card> = cards[cut_index..].to_vec();
+                    valid_meld_seqs.push(new_part1);
+                    valid_meld_seqs.push(new_part2);
+                }
+            }
+            let temp: Vec<Vec<&Card>> = invalid_meld_seqs
+                .into_iter()
+                .enumerate()
+                .filter(|(i, _)| !delete_invalid_index.contains(i))
+                .map(|(_, m)| m)
+                .collect();
+            invalid_meld_seqs = temp;
+
+            if invalid_meld_seqs.len() != 0 {
+                return Err(());
             }
 
             all_melds.extend(valid_meld_seqs.into_iter().map(|cards| {
@@ -734,10 +907,207 @@ impl UseJokerBot {
             }));
         }
 
-        let res = melds_value(&all_melds);
-        if with_memo {
-            self.dp_rank_seq[take_seq_index] = res;
+        while let Some(joker_card) = joker_cards.pop() {
+            let mut add_to: Option<usize> = None;
+            let mut max_value = 0;
+            let mut is_left = false;
+            let mut is_joker = false;
+            let mut do_split = false;
+            for (i, valid_meld) in all_melds.iter().enumerate() {
+                // check if valid_meld_seqs contains joker_card
+                let contains_joker = valid_meld.cards.iter().any(|card| card.rank == Rank::Joker);
+                if contains_joker {
+                    if valid_meld.cards.len() >= 5 {
+                        let joker_index = valid_meld
+                            .cards
+                            .iter()
+                            .position(|c| c.rank == Rank::Joker)
+                            .unwrap();
+                        let left_meld = &valid_meld.cards[0..joker_index];
+                        let right_meld = &valid_meld.cards[joker_index + 1..];
+
+                        if left_meld.len() >= 2 && right_meld.len() >= 2 {
+                            let mut val = 0;
+                            let left;
+                            if left_meld[0].rank == Rank::Number(2) {
+                                val += 11;
+                                let last_card = right_meld.last().unwrap();
+                                val += match last_card.rank {
+                                    Rank::Number(n) if n >= 2 && n <= 9 => {
+                                        rank_order(last_card.rank)[0] + 2
+                                    }
+                                    Rank::King => 11,
+                                    Rank::Ace => match right_meld[0].rank {
+                                        Rank::Number(2) => 11,
+                                        Rank::Number(n) if n > 2 && n <= 10 => {
+                                            rank_order(right_meld[0].rank)[0]
+                                        }
+                                        _ => 10,
+                                    },
+                                    _ => 10,
+                                };
+                                left = true;
+                            } else {
+                                let last_card = right_meld.last().unwrap();
+                                val += match last_card.rank {
+                                    Rank::Number(n) if n >= 2 && n <= 9 => {
+                                        rank_order(last_card.rank)[0] + 2
+                                    }
+                                    Rank::King => 11,
+                                    Rank::Ace => match right_meld[0].rank {
+                                        Rank::Number(2) => 11,
+                                        Rank::Number(n) if n > 2 && n <= 10 => {
+                                            rank_order(right_meld[0].rank)[0]
+                                        }
+                                        _ => 10,
+                                    },
+                                    _ => 10,
+                                };
+                                left = false;
+                            }
+                            if val > max_value {
+                                max_value = val;
+                                add_to = Some(i);
+                                is_left = left;
+                                is_joker = true;
+                            }
+                        }
+                    }
+                    continue;
+                }
+                let last_card = valid_meld.cards.last().unwrap();
+                if last_card.rank != Rank::Ace {
+                    let val = match last_card.rank {
+                        Rank::Number(n) if n >= 2 && n <= 9 => rank_order(last_card.rank)[0] + 2,
+                        Rank::King => 11,
+                        _ => 10,
+                    };
+                    if val > max_value {
+                        max_value = val;
+                        add_to = Some(i);
+                        is_left = false;
+                    }
+                }
+                let first_card = &valid_meld.cards[0];
+                if first_card.rank != Rank::Ace {
+                    let val = match first_card.rank {
+                        Rank::Number(n) if n >= 3 && n <= 10 => rank_order(first_card.rank)[0],
+                        Rank::Number(2) => 11,
+                        _ => 10,
+                    };
+                    if val > max_value {
+                        max_value = val;
+                        add_to = Some(i);
+                        is_left = true;
+                    }
+                }
+                if valid_meld.cards.len() >= 5 && last_card.rank == Rank::Ace {
+                    let val = 10;
+                    if val > max_value {
+                        max_value = val;
+                        add_to = Some(i);
+                        do_split = true;
+                    }
+                }
+            }
+
+            if let Some(idx) = add_to {
+                if is_joker {
+                    let joker_index = all_melds[idx]
+                        .cards
+                        .iter()
+                        .position(|c| c.rank == Rank::Joker)
+                        .unwrap();
+                    let mut left_meld = all_melds[idx].cards[0..joker_index].to_vec();
+                    let mut right_meld = all_melds[idx].cards[joker_index + 1..].to_vec();
+                    let joker_d_card = all_melds[idx].cards[joker_index].clone();
+                    all_melds.remove(idx);
+                    if is_left {
+                        left_meld.insert(0, joker_d_card);
+                        if right_meld.last().unwrap().rank != Rank::Ace {
+                            right_meld.push(joker_card.clone());
+                        } else {
+                            right_meld.insert(0, joker_card.clone());
+                        }
+                        all_melds.push(Meld {
+                            id: Uuid::new_v4().to_string(),
+                            cards: left_meld,
+                            meld_type: MeldType::Sequence,
+                        });
+                        all_melds.push(Meld {
+                            id: Uuid::new_v4().to_string(),
+                            cards: right_meld,
+                            meld_type: MeldType::Sequence,
+                        });
+                    } else {
+                        left_meld.push(joker_d_card.clone());
+                        if right_meld.last().unwrap().rank != Rank::Ace {
+                            right_meld.push(joker_card.clone());
+                        } else {
+                            right_meld.insert(0, joker_card.clone());
+                        }
+                        all_melds.push(Meld {
+                            id: Uuid::new_v4().to_string(),
+                            cards: left_meld,
+                            meld_type: MeldType::Sequence,
+                        });
+                        all_melds.push(Meld {
+                            id: Uuid::new_v4().to_string(),
+                            cards: right_meld,
+                            meld_type: MeldType::Sequence,
+                        });
+                    }
+                } else {
+                    if do_split {
+                        // split the last 3 cards from the rest of the cards
+                        let mut left_cards =
+                            all_melds[idx].cards[0..all_melds[idx].cards.len() - 3].to_vec();
+                        let right_cards =
+                            all_melds[idx].cards[all_melds[idx].cards.len() - 3..].to_vec();
+                        // remove the meld at idx
+                        all_melds.remove(idx);
+                        left_cards.push(joker_card.clone());
+                        all_melds.push(Meld {
+                            id: Uuid::new_v4().to_string(),
+                            cards: left_cards,
+                            meld_type: MeldType::Sequence,
+                        });
+                        all_melds.push(Meld {
+                            id: Uuid::new_v4().to_string(),
+                            cards: right_cards,
+                            meld_type: MeldType::Sequence,
+                        });
+                    } else {
+                        if is_left {
+                            all_melds[idx].cards.insert(0, joker_card.clone());
+                        } else {
+                            all_melds[idx].cards.push(joker_card.clone());
+                        }
+                    }
+                }
+            } else {
+                return Err(());
+            }
         }
+        Ok(all_melds)
+    }
+
+    pub fn get_seq_meld(&mut self, hand: &Vec<Card>, take_seq: &u32, with_memo: bool) -> i32 {
+        // print the ones and zeros of take_seq
+        let idx = *take_seq as usize;
+        if with_memo && self.dp_rank_seq[idx] != -2 {
+            return self.dp_rank_seq[idx];
+        }
+
+        let res = match self.build_seq_melds(hand, take_seq) {
+            Ok(m) => melds_value(&m),
+            Err(_) => -1,
+        };
+
+        if with_memo {
+            self.dp_rank_seq[idx] = res;
+        }
+
         res
     }
 
@@ -1012,471 +1382,7 @@ impl UseJokerBot {
     }
 
     pub fn get_seq_meld_cards(&mut self, hand: &Vec<Card>, take_seq: &u32) -> Vec<Meld> {
-        let mut joker_cards: Vec<&Card> = Vec::with_capacity(2);
-        // Pre-allocate groups with proper capacity
-        let mut groups: [Vec<&Card>; 4] = [Vec::new(), Vec::new(), Vec::new(), Vec::new()];
-
-        for i in 0..hand.len() {
-            if 1 & (take_seq >> i) == 0 {
-                continue;
-            }
-            let card = &hand[i];
-
-            if card.rank == Rank::Joker {
-                joker_cards.push(card);
-            } else {
-                // Find or create group for this suit
-                for group in &mut groups {
-                    if group.is_empty() || group[0].suit == card.suit {
-                        group.push(card);
-                        break;
-                    }
-                }
-            }
-        }
-
-        let mut all_melds: Vec<Meld> = Vec::with_capacity(15);
-
-        for group in &groups {
-            if group.is_empty() {
-                continue;
-            }
-
-            let mut new_cards: Vec<&Card> = Vec::with_capacity(15);
-            let mut aces_cards: Vec<&Card> = Vec::with_capacity(4);
-
-            for &card in group {
-                if card.rank == Rank::Ace {
-                    aces_cards.push(card);
-                } else {
-                    new_cards.push(card);
-                }
-            }
-
-            // Cache rank orders to avoid repeated function calls
-            new_cards.sort_by_key(|card| rank_order(card.rank)[0]);
-
-            let mut left_over_cards: Vec<&Card> = Vec::with_capacity(8);
-            let mut meld_seqs: Vec<Vec<&Card>> = Vec::with_capacity(15);
-            let mut meld: Vec<&Card> = vec![new_cards[0]];
-
-            for i in 1..new_cards.len() {
-                let prev_card = new_cards[i - 1];
-                let card = new_cards[i];
-                if card.rank == prev_card.rank {
-                    left_over_cards.push(card);
-                    continue;
-                }
-                if !valid_sequence_two_cards(prev_card, card, i == 1, i == new_cards.len() - 1) {
-                    if !meld.is_empty() {
-                        meld_seqs.push(meld);
-                        meld = Vec::new();
-                    }
-                }
-                meld.push(card);
-            }
-            if !meld.is_empty() {
-                meld_seqs.push(meld);
-            }
-
-            if !left_over_cards.is_empty() {
-                let mut meld = vec![left_over_cards[0]];
-                for i in 1..left_over_cards.len() {
-                    let prev_card = left_over_cards[i - 1];
-                    let card = left_over_cards[i];
-                    if !valid_sequence_two_cards(
-                        prev_card,
-                        card,
-                        i == 1,
-                        i == left_over_cards.len() - 1,
-                    ) {
-                        if !meld.is_empty() {
-                            meld_seqs.push(meld);
-                            meld = Vec::new();
-                        }
-                    }
-                    meld.push(card);
-                }
-                if !meld.is_empty() {
-                    meld_seqs.push(meld);
-                }
-            }
-
-            let mut invalid_meld_seqs: Vec<Vec<&Card>> = Vec::with_capacity(15);
-            let mut valid_meld_seqs: Vec<Vec<&Card>> = Vec::with_capacity(5);
-
-            for meld in meld_seqs {
-                if meld.len() > 2 {
-                    valid_meld_seqs.push(meld);
-                } else if !meld.is_empty() {
-                    invalid_meld_seqs.push(meld);
-                }
-            }
-
-            invalid_meld_seqs.sort_by_key(|m| m.len());
-
-            // Break a sequence
-            let mut delete_invalid_index: HashSet<usize> = HashSet::new();
-            for (i, iv_meld) in invalid_meld_seqs.iter().enumerate() {
-                if delete_invalid_index.contains(&i) {
-                    continue;
-                }
-                let mut break_index: Option<usize> = None;
-
-                let rank_l = rank_order(iv_meld[0].rank)[0];
-                let rank_r = rank_order(iv_meld.last().unwrap().rank)[0];
-
-                for (j, meld) in valid_meld_seqs.iter().enumerate() {
-                    let rank_ll = rank_order(meld[0].rank)[0];
-                    let rank_rr = rank_order(meld.last().unwrap().rank)[0];
-
-                    if iv_meld.len() == 1 {
-                        if rank_ll <= rank_l - 2 && rank_rr >= rank_r + 2 {
-                            break_index = Some(j);
-                        }
-                    } else {
-                        if rank_ll <= rank_l - 1 && rank_rr >= rank_r + 1 {
-                            break_index = Some(j);
-                            break;
-                        }
-                    }
-                }
-
-                if let Some(idx) = break_index {
-                    let cards = valid_meld_seqs.swap_remove(idx);
-                    delete_invalid_index.insert(i);
-                    let cut_index = cards
-                        .iter()
-                        .position(|c| c.rank == iv_meld[0].rank)
-                        .unwrap();
-                    let mut new_part1: Vec<&Card> = cards[0..cut_index].to_vec();
-                    new_part1.extend_from_slice(iv_meld);
-                    let new_part2: Vec<&Card> = cards[cut_index..].to_vec();
-                    valid_meld_seqs.push(new_part1);
-                    valid_meld_seqs.push(new_part2);
-                }
-            }
-            let temp: Vec<Vec<&Card>> = invalid_meld_seqs
-                .into_iter()
-                .enumerate()
-                .filter(|(i, _)| !delete_invalid_index.contains(i))
-                .map(|(_, m)| m)
-                .collect();
-            invalid_meld_seqs = temp;
-
-            // Connect a sequence
-            delete_invalid_index.clear();
-            for (i, iv_meld) in invalid_meld_seqs.iter().enumerate() {
-                if delete_invalid_index.contains(&i) {
-                    continue;
-                }
-
-                if !aces_cards.is_empty()
-                    && iv_meld.len() == 2
-                    && (iv_meld[0].rank == Rank::Number(2) || iv_meld[1].rank == Rank::King)
-                {
-                    continue;
-                }
-
-                let iv_last_rank = rank_order(iv_meld.last().unwrap().rank)[0];
-                let iv_first_rank = rank_order(iv_meld[0].rank)[0];
-
-                for (j, meld) in invalid_meld_seqs.iter().enumerate() {
-                    if delete_invalid_index.contains(&j) || i == j {
-                        continue;
-                    }
-                    if !aces_cards.is_empty()
-                        && meld.len() == 2
-                        && (meld[0].rank == Rank::Number(2) || meld[1].rank == Rank::King)
-                    {
-                        continue;
-                    }
-
-                    let meld_first_rank = rank_order(meld[0].rank)[0];
-                    let meld_last_rank = rank_order(meld.last().unwrap().rank)[0];
-
-                    if iv_last_rank + 2 == meld_first_rank {
-                        let joker_card = joker_cards.pop().unwrap();
-                        delete_invalid_index.insert(i);
-                        delete_invalid_index.insert(j);
-                        let mut combined: Vec<&Card> = iv_meld.to_vec();
-                        combined.push(joker_card);
-                        combined.extend_from_slice(meld);
-                        valid_meld_seqs.push(combined);
-                        break;
-                    }
-
-                    if iv_first_rank == meld_last_rank + 2 {
-                        let joker_card = joker_cards.pop().unwrap();
-                        delete_invalid_index.insert(i);
-                        delete_invalid_index.insert(j);
-                        let mut combined: Vec<&Card> = meld.to_vec();
-                        combined.push(joker_card);
-                        combined.extend_from_slice(iv_meld);
-                        valid_meld_seqs.push(combined);
-                        break;
-                    }
-                }
-                if delete_invalid_index.contains(&i) {
-                    continue;
-                }
-
-                let mut add_to: Option<usize> = None;
-                let mut to_left = false;
-
-                for (j, meld) in valid_meld_seqs.iter().enumerate() {
-                    let meld_first_rank = rank_order(meld[0].rank)[0];
-                    let meld_last_rank = rank_order(meld[meld.len() - 1].rank)[0];
-
-                    if iv_last_rank + 2 == meld_first_rank {
-                        add_to = Some(j);
-                        to_left = true;
-                        break;
-                    }
-                    if iv_last_rank == meld_last_rank + 2 {
-                        add_to = Some(j);
-                        to_left = false;
-                        break;
-                    }
-                }
-
-                if let Some(idx) = add_to {
-                    delete_invalid_index.insert(i);
-                    let valid_meld = valid_meld_seqs.remove(idx);
-                    let joker_card = joker_cards.pop().unwrap();
-                    if to_left {
-                        let mut combined: Vec<&Card> = iv_meld.to_vec();
-                        combined.push(joker_card);
-                        combined.extend(valid_meld);
-                        valid_meld_seqs.push(combined);
-                    } else {
-                        let mut combined = valid_meld;
-                        combined.push(joker_card);
-                        combined.extend_from_slice(iv_meld);
-                        valid_meld_seqs.push(combined);
-                    }
-                }
-            }
-            let temp: Vec<Vec<&Card>> = invalid_meld_seqs
-                .into_iter()
-                .enumerate()
-                .filter(|(i, _)| !delete_invalid_index.contains(i))
-                .map(|(_, m)| m)
-                .collect();
-            invalid_meld_seqs = temp;
-
-            // Add needed Aces and Jokers
-            delete_invalid_index.clear();
-            for (i, meld) in invalid_meld_seqs.iter().enumerate() {
-                if meld.len() == 2 {
-                    if !aces_cards.is_empty() {
-                        if meld[0].rank == Rank::Number(2) {
-                            let ace_card = aces_cards.pop().unwrap();
-                            delete_invalid_index.insert(i);
-                            let mut new_m = vec![ace_card];
-                            new_m.extend_from_slice(meld);
-                            valid_meld_seqs.push(new_m);
-                            continue;
-                        } else if meld.last().unwrap().rank == Rank::King {
-                            let ace_card = aces_cards.pop().unwrap();
-                            delete_invalid_index.insert(i);
-                            let mut new_m = meld.to_vec();
-                            new_m.push(ace_card);
-                            valid_meld_seqs.push(new_m);
-                            continue;
-                        }
-                    }
-                    if !joker_cards.is_empty() {
-                        let joker_card = joker_cards.pop().unwrap();
-                        delete_invalid_index.insert(i);
-                        let mut new_m = meld.to_vec();
-                        new_m.push(joker_card);
-                        valid_meld_seqs.push(new_m);
-                        continue;
-                    }
-                } else if meld.len() == 1 {
-                    if !joker_cards.is_empty() || !aces_cards.is_empty() {
-                        if !joker_cards.is_empty() {
-                            // try last break
-                            let mut break_index: Option<usize> = None;
-                            let mut is_left = false;
-                            let rank = rank_order(meld[0].rank)[0];
-
-                            for (j, meld) in valid_meld_seqs.iter().enumerate() {
-                                let rank_ll = rank_order(meld[0].rank)[0];
-                                let rank_rr = rank_order(meld.last().unwrap().rank)[0];
-
-                                if rank_ll <= rank - 2 && rank_rr >= rank + 1 {
-                                    break_index = Some(j);
-                                    is_left = false;
-                                    break;
-                                }
-                                if rank_ll <= rank - 1 && rank_rr >= rank + 2 {
-                                    is_left = true;
-                                    break_index = Some(j);
-                                }
-                            }
-                            if let Some(break_index) = break_index {
-                                let cards = valid_meld_seqs.swap_remove(break_index);
-                                delete_invalid_index.insert(i);
-                                let joker_card = joker_cards.pop().unwrap();
-                                let cut_index =
-                                    cards.iter().position(|c| c.rank == meld[0].rank).unwrap();
-                                let mut new_part1: Vec<&Card> = cards[0..=cut_index].to_vec();
-                                let mut new_part2: Vec<&Card> = cards[cut_index + 1..].to_vec();
-                                new_part2.insert(0, meld[0]);
-                                if is_left {
-                                    new_part1.push(joker_card);
-                                } else {
-                                    new_part2.push(joker_card);
-                                }
-                                valid_meld_seqs.push(new_part1);
-                                valid_meld_seqs.push(new_part2);
-                                continue;
-                            }
-                        }
-                        if meld[0].rank == Rank::Number(2)
-                            && !aces_cards.is_empty()
-                            && !joker_cards.is_empty()
-                        {
-                            let joker_card = joker_cards.pop().unwrap();
-                            let ace_card = aces_cards.pop().unwrap();
-                            delete_invalid_index.insert(i);
-                            valid_meld_seqs.push(vec![ace_card, meld[0], joker_card]);
-                            continue;
-                        } else if meld[0].rank == Rank::King
-                            && !aces_cards.is_empty()
-                            && !joker_cards.is_empty()
-                        {
-                            let joker_card = joker_cards.pop().unwrap();
-                            let ace_card = aces_cards.pop().unwrap();
-                            delete_invalid_index.insert(i);
-                            valid_meld_seqs.push(vec![joker_card, meld[0], ace_card]);
-                            continue;
-                        } else if meld[0].rank == Rank::Number(3)
-                            && !aces_cards.is_empty()
-                            && !joker_cards.is_empty()
-                        {
-                            let joker_card = joker_cards.pop().unwrap();
-                            let ace_card = aces_cards.pop().unwrap();
-                            delete_invalid_index.insert(i);
-                            valid_meld_seqs.push(vec![ace_card, joker_card, meld[0]]);
-                        } else if meld[0].rank == Rank::Queen
-                            && !aces_cards.is_empty()
-                            && !joker_cards.is_empty()
-                        {
-                            let joker_card = joker_cards.pop().unwrap();
-                            let ace_card = aces_cards.pop().unwrap();
-                            delete_invalid_index.insert(i);
-                            valid_meld_seqs.push(vec![meld[0], joker_card, ace_card]);
-                        } else {
-                            return vec![];
-                        }
-                    } else {
-                        return vec![];
-                    }
-                }
-            }
-            let temp: Vec<Vec<&Card>> = invalid_meld_seqs
-                .into_iter()
-                .enumerate()
-                .filter(|(i, _)| !delete_invalid_index.contains(i))
-                .map(|(_, m)| m)
-                .collect();
-            invalid_meld_seqs = temp;
-
-            // Add ace cards
-            while let Some(ace_card) = aces_cards.pop() {
-                let mut add_to: Option<usize> = None;
-                let mut is_left = false;
-
-                for (i, valid_meld) in valid_meld_seqs.iter().enumerate() {
-                    if valid_meld[0].rank == Rank::Number(2)
-                        || valid_meld[1].rank == Rank::Number(3)
-                    {
-                        add_to = Some(i);
-                        is_left = true;
-                        break;
-                    }
-                    if valid_meld.last().unwrap().rank == Rank::King
-                        || valid_meld[valid_meld.len() - 2].rank == Rank::Queen
-                    {
-                        add_to = Some(i);
-                        break;
-                    }
-                }
-                if let Some(idx) = add_to {
-                    if is_left {
-                        valid_meld_seqs[idx].insert(0, ace_card);
-                    } else {
-                        valid_meld_seqs[idx].push(ace_card);
-                    }
-                }
-            }
-
-            // Add joker cards
-            while let Some(joker_card) = joker_cards.pop() {
-                let mut add_to: Option<usize> = None;
-                let mut max_value = 0;
-                let mut is_left = false;
-
-                for (i, valid_meld) in valid_meld_seqs.iter().enumerate() {
-                    // check if valid_meld_seqs contains joker_card
-                    let contains_joker = valid_meld.iter().any(|card| card.rank == Rank::Joker);
-                    if contains_joker {
-                        continue;
-                    }
-                    let last_card = valid_meld.last().unwrap();
-                    if last_card.rank != Rank::Ace {
-                        let val = match last_card.rank {
-                            Rank::Number(n) if n >= 2 && n <= 9 => {
-                                rank_order(last_card.rank)[0] + 1
-                            }
-                            Rank::King => 11,
-                            _ => 10,
-                        };
-                        if val > max_value {
-                            max_value = val;
-                            add_to = Some(i);
-                            is_left = false;
-                        }
-                    }
-                    let first_card = valid_meld[0];
-                    if first_card.rank != Rank::Ace {
-                        let val = match first_card.rank {
-                            Rank::Number(n) if n >= 3 && n <= 10 => {
-                                rank_order(first_card.rank)[0] - 1
-                            }
-                            Rank::Number(2) => 11,
-                            _ => 10,
-                        };
-                        if val > max_value {
-                            max_value = val;
-                            add_to = Some(i);
-                            is_left = true;
-                        }
-                    }
-                }
-                if let Some(idx) = add_to {
-                    if is_left {
-                        valid_meld_seqs[idx].insert(0, joker_card);
-                    } else {
-                        valid_meld_seqs[idx].push(joker_card);
-                    }
-                }
-            }
-
-            all_melds.extend(valid_meld_seqs.into_iter().map(|cards| {
-                let owned_cards: Vec<Card> = cards.into_iter().map(|c| (*c).clone()).collect();
-                Meld {
-                    id: Uuid::new_v4().to_string(),
-                    cards: owned_cards,
-                    meld_type: MeldType::Sequence,
-                }
-            }));
-        }
-
-        all_melds
+        self.build_seq_melds(hand, take_seq).unwrap_or_default()
     }
 
     pub fn calc(&mut self, hand: &Vec<Card>) {
@@ -1579,9 +1485,9 @@ impl BotStrategy for UseJokerBot {
     fn find_melds(&mut self, hand: &Vec<Card>) -> Vec<Meld> {
         self.reset_calc_values();
 
-        let start = std::time::Instant::now();
+        // let start = std::time::Instant::now();
         self.calc(hand);
-        println!("calc time: {:?}ms", start.elapsed().as_millis());
+        // println!("calc time: {:?}ms", start.elapsed().as_millis());
 
         if self.max_cards_count > 0 {
             let mut rank_cards = Vec::new();

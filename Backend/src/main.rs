@@ -14,8 +14,11 @@ mod bots {
     pub mod use_joker;
 }
 
+use crate::bots::use_joker::UseJokerBot;
 use crate::bots::better_discard::UseBetterDiscard;
 use crate::logic::GameState;
+use crate::logic::{Card, Rank, Suit, melds_value};
+use crate::bot::BotStrategy;
 use crate::websocket::websocket_handler;
 use crate::{
     apis::bot::{discard, draw_card, init_bot, meld_cards, play_in_melds},
@@ -53,6 +56,75 @@ impl AppState {
     }
 }
 
+
+// fn main() {
+//     let mut bot: UseJokerBot = UseJokerBot::new("test_bot".to_string());
+//     let args: Vec<String> = std::env::args().collect();
+
+//     let cards = args[1].split(' ');
+//     let mut hand = Vec::new();
+//     for card in cards {
+//         let rank_char = &card[0..card.len() - 1];
+//         let suit_char = &card[card.len() - 1..];
+
+//         let rank = match rank_char {
+//             "A" => Rank::Ace,
+//             "2" => Rank::Number(2),
+//             "3" => Rank::Number(3),
+//             "4" => Rank::Number(4),
+//             "5" => Rank::Number(5),
+//             "6" => Rank::Number(6),
+//             "7" => Rank::Number(7),
+//             "8" => Rank::Number(8),
+//             "9" => Rank::Number(9),
+//             "10" => Rank::Number(10),
+//             "J" => Rank::Jack,
+//             "Q" => Rank::Queen,
+//             "K" => Rank::King,
+//             "Joke" => Rank::Joker,
+//             _ => panic!("Invalid rank"),
+//         };
+
+//         let suit = match suit_char {
+//             "H" => Suit::Hearts,
+//             "D" => Suit::Diamonds,
+//             "C" => Suit::Clubs,
+//             "S" => Suit::Spades,
+//             "r" => Suit::Joker,
+//             _ => panic!("Invalid suit"),
+//         };
+
+//         hand.push(Card { 
+//             id: uuid::Uuid::new_v4().to_string(),
+//             rank,
+//             suit
+//         });
+//     }
+//     let melds = bot.find_melds(&hand);
+//     println!("{}", melds_value(&melds));
+//     for meld in &melds {
+//         if meld.meld_type == crate::logic::MeldType::Rank {
+//             println!("Rank Meld: ");
+//             for card in &meld.cards {
+//                 println!("{:?} {:?} ", card.rank, card.suit);
+//             }
+//             println!();
+//         }
+//         if meld.meld_type == crate::logic::MeldType::Sequence {
+//             println!("Sequence Meld: ");
+//             for card in &meld.cards {
+//                 println!("{:?} {:?} ", card.rank, card.suit);
+//             }
+//             println!();
+//         }
+//     }
+// }
+
+//  AH 7H 3H QD 4C 7H 3D 2D JH KH 10H 3C QH AH Joker
+//  
+// 
+// 
+
 #[tokio::main]
 async fn main() {
     let state = AppState {
@@ -62,7 +134,7 @@ async fn main() {
     };
 
     let allowed_origins_str =
-        "https://www.jawaker.com,https://cdn.jawaker.com,https://hand.warmhmd.online";
+        "http://localhost:3001,https://www.jawaker.com,https://cdn.jawaker.com,https://hand.warmhmd.online";
     let allowed_origins: Vec<HeaderValue> = allowed_origins_str
         .split(',')
         .map(|s| HeaderValue::from_str(s.trim()).unwrap())
@@ -121,9 +193,9 @@ async fn main() {
         .layer(cors)
         .with_state(Arc::new(state));
 
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3010").await.unwrap();
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
 
-    println!("🚀 Backend running on http://0.0.0.0:3010");
-    println!("🔌 WebSocket endpoint: ws://0.0.0.0:3010/ws");
+    println!("🚀 Backend running on http://0.0.0.0:3000");
+    println!("🔌 WebSocket endpoint: ws://0.0.0.0:3000/ws");
     axum::serve(listener, app).await.unwrap();
 }

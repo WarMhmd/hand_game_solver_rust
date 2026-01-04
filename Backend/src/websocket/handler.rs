@@ -253,3 +253,4 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
 
     println!("👋 WebSocket connection terminated");
 }
+
