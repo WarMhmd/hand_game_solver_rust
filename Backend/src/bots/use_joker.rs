@@ -970,6 +970,7 @@ impl UseJokerBot {
                                 add_to = Some(i);
                                 is_left = left;
                                 is_joker = true;
+                                do_split = false;
                             }
                         }
                     }
@@ -986,6 +987,8 @@ impl UseJokerBot {
                         max_value = val;
                         add_to = Some(i);
                         is_left = false;
+                        is_joker = false;
+                        do_split = false;
                     }
                 }
                 let first_card = &valid_meld.cards[0];
@@ -999,6 +1002,8 @@ impl UseJokerBot {
                         max_value = val;
                         add_to = Some(i);
                         is_left = true;
+                        is_joker = false;
+                        do_split = false;
                     }
                 }
                 if valid_meld.cards.len() >= 5 && last_card.rank == Rank::Ace {
@@ -1007,6 +1012,8 @@ impl UseJokerBot {
                         max_value = val;
                         add_to = Some(i);
                         do_split = true;
+                        is_left = false;
+                        is_joker = false;
                     }
                 }
             }
