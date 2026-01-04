@@ -690,6 +690,8 @@ impl UseJokerBot {
                 .collect();
             invalid_meld_seqs = temp;
 
+            // println!("valid_seq {:?}", valid_meld_seqs);
+
             // Add ace cards
             while let Some(ace_card) = aces_cards.pop() {
                 let mut add_to: Option<usize> = None;
@@ -729,11 +731,13 @@ impl UseJokerBot {
                         if valid_meld.last().unwrap().rank == Rank::Queen && !joker_cards.is_empty()
                         {
                             add_to = Some(i);
+                            is_left = false;
                             add_joker = true;
                             break;
                         }
                     }
                 }
+
                 if add_to.is_none() {
                     // try to split joker meld
                     for (i, valid_meld) in valid_meld_seqs.iter().enumerate() {
@@ -774,6 +778,7 @@ impl UseJokerBot {
                         }
                     }
                 }
+
                 if let Some(idx) = add_to {
                     if split_joker {
                         let joker_index = valid_meld_seqs[idx]
@@ -845,6 +850,10 @@ impl UseJokerBot {
                     // 2H 8S 4S 9D 3C 7C QH KH 2D AH 2H 6D 10H Joker 4D
                     if iv_meld.len() == 1 {
                         if rank_ll <= rank_l - 2 && rank_rr >= rank_r + 2 {
+                            // println!(
+                            //     "1 break_index {:?} {:?} {:?} {:?}",
+                            //     meld[0], meld[1], meld[2], meld[3]
+                            // );
                             break_index = Some(j);
                         }
                     } else {
